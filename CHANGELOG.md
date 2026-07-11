@@ -12,3 +12,4 @@
 - Replaced the launcher artwork with the user-provided black-and-gold wallet, coins, receipt, and income/expense arrows image without visual alteration.
 - Fixed the unavailable ML Kit Thai artifact by using the published on-device text recognition package; documented that Thai labels may require correction.
 - Added GitHub Actions debug/placeholder fallback so every push can produce an APK before owner secrets exist; production and tagged distribution still require real Firebase and signing secrets.
+- Fixed the missing closing scope in the transaction row composable found by GitHub Actions compilation.
