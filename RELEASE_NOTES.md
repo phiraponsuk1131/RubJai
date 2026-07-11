@@ -1,4 +1,14 @@
-# RubJai v1.1.0
+# RubJai v1.1.1
+
+## Fixed in v1.1.1
+
+- Passwords are hidden by default and can be revealed with the eye button.
+- Email verification status refreshes automatically; no manual confirmation button is required.
+- Launcher artwork is cropped symmetrically from the original image and centered.
+
+---
+
+## Previous release: RubJai v1.1.0
 
 ## Added in v1.1.0
 

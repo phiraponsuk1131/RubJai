@@ -19,6 +19,8 @@ import androidx.compose.material.icons.filled.ImageSearch
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CreditCard
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -26,6 +28,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -36,6 +40,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import java.text.NumberFormat
 import java.util.Locale
+import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
     private val repository = TransactionRepository()
@@ -183,14 +188,14 @@ private fun DebtPlannerScreen(onClose: () -> Unit) {
 @Composable
 private fun AuthScreen(repository: AuthRepository) {
     var email by remember { mutableStateOf("") }; var password by remember { mutableStateOf("") }; var name by remember { mutableStateOf("") }
-    var creating by remember { mutableStateOf(false) }; var busy by remember { mutableStateOf(false) }; var error by remember { mutableStateOf<String?>(null) }
+    var creating by remember { mutableStateOf(false) }; var busy by remember { mutableStateOf(false) }; var error by remember { mutableStateOf<String?>(null) }; var passwordVisible by remember { mutableStateOf(false) }
     Surface(Modifier.fillMaxSize(), color = Color(0xFFF4F7FA)) {
         Column(Modifier.fillMaxWidth().widthIn(max = 480.dp).padding(24.dp).verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
             Spacer(Modifier.height(48.dp)); Text("RubJai", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold, color = Color(0xFF071A3D)); Text(if (creating) "สร้างบัญชีใหม่" else "เข้าสู่ระบบเพื่อซิงก์ข้อมูลของคุณ")
             Spacer(Modifier.height(24.dp))
             if (creating) OutlinedTextField(name, { name = it }, label = { Text("ชื่อที่แสดง") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
             OutlinedTextField(email, { email = it }, label = { Text("อีเมล") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-            OutlinedTextField(password, { password = it }, label = { Text("รหัสผ่านอย่างน้อย 6 ตัว") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+            OutlinedTextField(password, { password = it }, label = { Text("รหัสผ่านอย่างน้อย 6 ตัว") }, modifier = Modifier.fillMaxWidth(), singleLine = true, visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(), trailingIcon = { IconButton(onClick = { passwordVisible = !passwordVisible }) { Icon(if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility, if (passwordVisible) "ซ่อนรหัสผ่าน" else "แสดงรหัสผ่าน") } })
             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             Spacer(Modifier.height(12.dp))
             Button(enabled = !busy && email.isNotBlank() && password.length >= 6 && (!creating || name.isNotBlank()), onClick = { busy = true; if (creating) repository.createAccount(email, password, name) { busy = false; error = it } else repository.signIn(email, password) { busy = false; error = it } }, modifier = Modifier.fillMaxWidth()) { Text(if (creating) "สมัครสมาชิก" else "เข้าสู่ระบบ") }
@@ -203,9 +208,14 @@ private fun AuthScreen(repository: AuthRepository) {
 @Composable
 private fun VerifyEmailScreen(repository: AuthRepository, email: String, onVerified: () -> Unit) {
     var message by remember { mutableStateOf("ส่งลิงก์ยืนยันไปที่ $email แล้ว") }; var busy by remember { mutableStateOf(false) }
+    LaunchedEffect(email) {
+        while (true) {
+            delay(2_500)
+            repository.refreshUser { verified, _ -> if (verified) onVerified() }
+        }
+    }
     Surface(Modifier.fillMaxSize(), color = Color(0xFFF4F7FA)) { Column(Modifier.fillMaxSize().padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-        Text("ยืนยันอีเมล", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold); Spacer(Modifier.height(12.dp)); Text(message); Spacer(Modifier.height(20.dp))
-        Button(enabled = !busy, onClick = { busy = true; repository.refreshUser { verified, error -> busy = false; if (verified) onVerified() else message = error ?: "ยังไม่พบการยืนยัน กรุณากดลิงก์ในอีเมลแล้วลองอีกครั้ง" } }, modifier = Modifier.fillMaxWidth()) { Text("ยืนยันแล้ว — ตรวจสอบอีกครั้ง") }
+        Text("ยืนยันอีเมล", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold); Spacer(Modifier.height(12.dp)); Text(message); Spacer(Modifier.height(20.dp)); CircularProgressIndicator(); Spacer(Modifier.height(8.dp)); Text("กำลังตรวจสอบอัตโนมัติ…", color = Color.Gray)
         OutlinedButton(enabled = !busy, onClick = { repository.resendVerification { message = it ?: "ส่งลิงก์ยืนยันใหม่แล้ว" } }, modifier = Modifier.fillMaxWidth()) { Text("ส่งอีเมลยืนยันอีกครั้ง") }
         TextButton(onClick = { repository.signOut() }) { Text("กลับไปหน้าเข้าสู่ระบบ") }
     } }

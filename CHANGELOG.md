@@ -28,3 +28,6 @@
 - Added payment-slip application with duplicate-slip fingerprint protection and automatic balance reduction.
 - Added payoff-month estimation from the latest payment (including entered annual interest) and progress-based encouragement.
 - Bumped the app to `1.1.0`; devices on `1.0.0` will discover it through the GitHub Release update popup after release publication.
+- Fixed password fields to hide input by default with an explicit eye toggle.
+- Fixed verified accounts remaining stuck on the waiting screen by automatically reloading Firebase verification state every 2.5 seconds.
+- Prepared patch version `1.1.1` for the centered launcher crop and authentication UX fixes.
