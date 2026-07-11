@@ -16,7 +16,11 @@ service cloud.firestore {
           && request.resource.data.title is string
           && request.resource.data.title.size() <= 200
           && request.resource.data.rawText is string
-          && request.resource.data.rawText.size() <= 3000;
+          && request.resource.data.rawText.size() <= 3000
+          && request.resource.data.category is string
+          && request.resource.data.category.size() <= 50
+          && request.resource.data.remark is string
+          && request.resource.data.remark.size() <= 500;
         allow delete: if request.auth != null && request.auth.uid == userId;
       }
     }

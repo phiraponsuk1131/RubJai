@@ -17,3 +17,9 @@
 - Added a profile dialog for editing display name and optional phone, signing out, and storing owner-only profile data in Firestore.
 - Confirmed the Firebase project `rubjai-60e6d` and default Firestore database; collections are created automatically by the app.
 - Confirmed Firestore security rules were published and replaced the Firebase config with the post-Google-provider file containing an OAuth web client for Google sign-in.
+- Removed Google and anonymous login at the user's request; the first screen is now email/password login and registration only.
+- Final authentication decision: Firebase email verification link is required before entering the app; numeric OTP, Google, and anonymous login are not used.
+- Added automatic slip amount, merchant, category, and Remark/Note/Memo extraction with editable confirmation and category-aware summaries.
+- Added a more useful dashboard overview for transaction count and leading category.
+- Cropped only the empty outer margin from the user-provided launcher artwork so the original wallet icon appears larger without changing its design.
+- Prepared verified account email as the destination identity for a future monthly report feature; automated report delivery is not part of v1.0.0 yet.

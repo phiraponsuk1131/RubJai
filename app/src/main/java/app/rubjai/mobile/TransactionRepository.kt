@@ -14,6 +14,8 @@ data class MoneyTransaction(
     val type: String = "EXPENSE",
     val source: String = "manual",
     val rawText: String = "",
+    val category: String = "อื่น ๆ",
+    val remark: String = "",
     @ServerTimestamp val createdAt: Date? = null,
 )
 
@@ -22,7 +24,7 @@ class TransactionRepository {
     private val db = FirebaseFirestore.getInstance()
 
     private fun withUser(block: (String) -> Unit) {
-        auth.currentUser?.uid?.let(block) ?: auth.signInAnonymously().addOnSuccessListener { block(it.user!!.uid) }
+        auth.currentUser?.uid?.let(block)
     }
 
     fun observe(onChange: (List<MoneyTransaction>) -> Unit) = withUser { uid ->
@@ -33,7 +35,7 @@ class TransactionRepository {
 
     fun add(draft: DraftTransaction, onDone: (String?) -> Unit) = withUser { uid ->
         val id = UUID.randomUUID().toString()
-        val item = MoneyTransaction(id, draft.amount.toDouble(), draft.title.trim(), draft.type.name, draft.source, draft.rawText.take(3000), Date())
+        val item = MoneyTransaction(id, draft.amount.toDouble(), draft.title.trim(), draft.type.name, draft.source, draft.rawText.take(3000), draft.category, draft.remark.take(500), Date())
         db.collection("users").document(uid).collection("transactions").document(id).set(item)
             .addOnSuccessListener { onDone(null) }.addOnFailureListener { onDone(it.localizedMessage ?: "บันทึกไม่สำเร็จ") }
     }

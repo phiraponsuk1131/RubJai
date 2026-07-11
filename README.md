@@ -7,7 +7,7 @@ RubJai is an Android income and expense tracker built with Kotlin and Jetpack Co
 - Add income, expenses, and salary manually.
 - Select a slip image and extract amount text locally with ML Kit OCR; Thai labels may need manual correction because the bundled recognizer officially focuses on Latin-script text and digits.
 - Receive text or slip images through Android Share, including content explicitly shared from LINE.
-- Register or sign in with email/password, Google, or an optional anonymous trial; edit display name and phone in a scroll-safe profile dialog.
+- Register or sign in with email/password, confirm Firebase's email verification link, and edit display name and phone in a scroll-safe profile dialog.
 - Show income, expenses, and current balance; sync transactions to each signed-in user's Firestore path.
 - Always show extracted data for confirmation before saving.
 - Check the public RubJai GitHub Release at startup and offer an in-app APK download with progress.
@@ -19,7 +19,7 @@ RubJai cannot directly read private LINE chats. LINE does not expose a consumer 
 1. Open Firebase Console and create a new project, for example `rubjai-app`. Do not reuse ThaiGuard's project.
 2. Add an Android app with package name exactly `app.rubjai.mobile`.
 3. Download `google-services.json` and save it locally as `app/google-services.json`. It is ignored by Git.
-4. In Authentication > Sign-in method, enable Email/Password, Anonymous, and Google. Select a project support email for Google, save, then download `google-services.json` again so it contains the OAuth client.
+4. In Authentication > Sign-in method, enable Email/Password. Google and Anonymous are not used. Firebase sends a secure verification link; numeric OTP is not used.
 5. Create Cloud Firestore, choose the region nearest your users, then deploy `firestore.rules` with `firebase deploy --only firestore:rules`.
 6. In GitHub Secrets, add `GOOGLE_SERVICES_JSON_BASE64` containing the Base64 form of `google-services.json`.
 7. Create one permanent release keystore and add `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and `ANDROID_KEY_PASSWORD` as repository secrets. Never commit the key.

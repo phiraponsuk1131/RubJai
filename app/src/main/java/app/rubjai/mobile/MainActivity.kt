@@ -1,7 +1,6 @@
 package app.rubjai.mobile
 
 import android.content.Intent
-import android.app.Activity
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -29,9 +28,6 @@ import androidx.compose.ui.unit.dp
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
-import com.google.android.gms.auth.api.signin.GoogleSignIn
-import com.google.android.gms.auth.api.signin.GoogleSignInOptions
-import com.google.android.gms.common.api.ApiException
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import java.text.NumberFormat
@@ -51,6 +47,8 @@ data class DraftTransaction(
     val type: TransactionType = TransactionType.EXPENSE,
     val source: String = "manual",
     val rawText: String = "",
+    val category: String = "อื่น ๆ",
+    val remark: String = "",
 )
 
 enum class TransactionType { INCOME, EXPENSE }
@@ -60,6 +58,7 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
     val context = LocalContext.current
     val authRepository = remember { AuthRepository() }
     var currentUser by remember { mutableStateOf<FirebaseUser?>(authRepository.auth.currentUser) }
+    var authRefresh by remember { mutableIntStateOf(0) }
     DisposableEffect(authRepository) {
         val listener = FirebaseAuth.AuthStateListener { currentUser = it.currentUser }
         authRepository.auth.addAuthStateListener(listener)
@@ -68,6 +67,10 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
     val colors = lightColorScheme(primary = Color(0xFF0B9B73), secondary = Color(0xFFFF6B57), background = Color(0xFFF4F7FA))
     if (currentUser == null) {
         MaterialTheme(colorScheme = colors) { AuthScreen(authRepository) }
+        return
+    }
+    if (currentUser?.isEmailVerified != true) {
+        MaterialTheme(colorScheme = colors) { VerifyEmailScreen(authRepository, currentUser?.email.orEmpty()) { authRefresh++; currentUser = authRepository.auth.currentUser } }
         return
     }
     var entries by remember { mutableStateOf(emptyList<MoneyTransaction>()) }
@@ -79,6 +82,7 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
     var updateProgress by remember { mutableStateOf<Float?>(null) }
     var updateMessage by remember { mutableStateOf<String?>(null) }
     var showProfile by remember { mutableStateOf(false) }
+    @Suppress("UNUSED_VARIABLE") val verificationRefresh = authRefresh
 
     LaunchedEffect(Unit) {
         repository.observe { entries = it }
@@ -109,7 +113,8 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
                         Icon(Icons.Default.ImageSearch, null); Spacer(Modifier.width(8.dp)); Text(if (busy) "กำลังอ่านสลิป…" else "เลือกสลิปจากเครื่อง")
                     }
                 }
-                item { Text("แชร์รูปสลิปหรือข้อความแจ้งเงินเข้าจาก LINE มาที่ RubJai แล้วตรวจข้อมูลก่อนบันทึก เงินเดือนเพิ่มเป็นรายรับและตั้งชื่อว่า “เงินเดือน” ได้", style = MaterialTheme.typography.bodySmall, color = Color.Gray) }
+                item { QuickOverview(entries) }
+                item { Text("สแกนแล้ว RubJai จะสรุปยอด ร้านค้า หมวด และหมายเหตุให้อัตโนมัติ เพียงตรวจแล้วกดบันทึก", style = MaterialTheme.typography.bodySmall, color = Color.Gray) }
                 items(entries, key = { it.id }) { EntryRow(it) }
             }
         }
@@ -141,14 +146,8 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
 
 @Composable
 private fun AuthScreen(repository: AuthRepository) {
-    val context = LocalContext.current
     var email by remember { mutableStateOf("") }; var password by remember { mutableStateOf("") }; var name by remember { mutableStateOf("") }
     var creating by remember { mutableStateOf(false) }; var busy by remember { mutableStateOf(false) }; var error by remember { mutableStateOf<String?>(null) }
-    val googleLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == Activity.RESULT_OK) runCatching { GoogleSignIn.getSignedInAccountFromIntent(result.data).getResult(ApiException::class.java) }
-            .onSuccess { account -> busy = true; repository.signInGoogle(account) { busy = false; error = it } }
-            .onFailure { error = it.localizedMessage ?: "เข้าสู่ระบบ Google ไม่สำเร็จ" }
-    }
     Surface(Modifier.fillMaxSize(), color = Color(0xFFF4F7FA)) {
         Column(Modifier.fillMaxWidth().widthIn(max = 480.dp).padding(24.dp).verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
             Spacer(Modifier.height(48.dp)); Text("RubJai", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold, color = Color(0xFF071A3D)); Text(if (creating) "สร้างบัญชีใหม่" else "เข้าสู่ระบบเพื่อซิงก์ข้อมูลของคุณ")
@@ -160,15 +159,20 @@ private fun AuthScreen(repository: AuthRepository) {
             Spacer(Modifier.height(12.dp))
             Button(enabled = !busy && email.isNotBlank() && password.length >= 6 && (!creating || name.isNotBlank()), onClick = { busy = true; if (creating) repository.createAccount(email, password, name) { busy = false; error = it } else repository.signIn(email, password) { busy = false; error = it } }, modifier = Modifier.fillMaxWidth()) { Text(if (creating) "สมัครสมาชิก" else "เข้าสู่ระบบ") }
             TextButton(onClick = { creating = !creating; error = null }) { Text(if (creating) "มีบัญชีแล้ว? เข้าสู่ระบบ" else "ยังไม่มีบัญชี? สมัครสมาชิก") }
-            HorizontalDivider(); Spacer(Modifier.height(12.dp))
-            OutlinedButton(enabled = !busy, onClick = {
-                val id = context.resources.getIdentifier("default_web_client_id", "string", context.packageName)
-                if (id == 0) error = "กรุณาเปิด Google Sign-in ใน Firebase แล้วดาวน์โหลด google-services.json ใหม่"
-                else { val options = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN).requestIdToken(context.getString(id)).requestEmail().build(); googleLauncher.launch(GoogleSignIn.getClient(context, options).signInIntent) }
-            }, modifier = Modifier.fillMaxWidth()) { Text("ดำเนินการต่อด้วย Google") }
-            TextButton(enabled = !busy, onClick = { busy = true; repository.signInAnonymously { busy = false; error = it } }) { Text("ทดลองใช้แบบไม่สมัคร") }
+            Text("หลังสมัคร ระบบจะส่งลิงก์ยืนยันอีเมล ต้องยืนยันก่อนเข้าดูข้อมูลการเงิน", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
         }
     }
+}
+
+@Composable
+private fun VerifyEmailScreen(repository: AuthRepository, email: String, onVerified: () -> Unit) {
+    var message by remember { mutableStateOf("ส่งลิงก์ยืนยันไปที่ $email แล้ว") }; var busy by remember { mutableStateOf(false) }
+    Surface(Modifier.fillMaxSize(), color = Color(0xFFF4F7FA)) { Column(Modifier.fillMaxSize().padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+        Text("ยืนยันอีเมล", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold); Spacer(Modifier.height(12.dp)); Text(message); Spacer(Modifier.height(20.dp))
+        Button(enabled = !busy, onClick = { busy = true; repository.refreshUser { verified, error -> busy = false; if (verified) onVerified() else message = error ?: "ยังไม่พบการยืนยัน กรุณากดลิงก์ในอีเมลแล้วลองอีกครั้ง" } }, modifier = Modifier.fillMaxWidth()) { Text("ยืนยันแล้ว — ตรวจสอบอีกครั้ง") }
+        OutlinedButton(enabled = !busy, onClick = { repository.resendVerification { message = it ?: "ส่งลิงก์ยืนยันใหม่แล้ว" } }, modifier = Modifier.fillMaxWidth()) { Text("ส่งอีเมลยืนยันอีกครั้ง") }
+        TextButton(onClick = { repository.signOut() }) { Text("กลับไปหน้าเข้าสู่ระบบ") }
+    } }
 }
 
 @Composable
@@ -198,14 +202,26 @@ private fun SummaryCard(entries: List<MoneyTransaction>) {
 
 @Composable private fun EntryRow(item: MoneyTransaction) { Card { Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(item.title.ifBlank { "ไม่ระบุรายการ" }, fontWeight = FontWeight.SemiBold); Text(item.source, style = MaterialTheme.typography.bodySmall, color = Color.Gray) }; Text((if (item.type == "INCOME") "+" else "-") + money(item.amount), color = if (item.type == "INCOME") Color(0xFF0B9B73) else Color(0xFFD84A3A), fontWeight = FontWeight.Bold) } } }
 
+@Composable private fun QuickOverview(entries: List<MoneyTransaction>) {
+    val top = entries.groupBy { it.category }.maxByOrNull { it.value.sumOf(MoneyTransaction::amount) }?.key ?: "ยังไม่มีข้อมูล"
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Card(Modifier.weight(1f), colors = CardDefaults.cardColors(containerColor = Color.White)) { Column(Modifier.padding(16.dp)) { Text("รายการเดือนนี้", color = Color.Gray); Text("${entries.size} รายการ", fontWeight = FontWeight.Bold) } }
+        Card(Modifier.weight(1f), colors = CardDefaults.cardColors(containerColor = Color.White)) { Column(Modifier.padding(16.dp)) { Text("หมวดหลัก", color = Color.Gray); Text(top, fontWeight = FontWeight.Bold, maxLines = 1) } }
+    }
+}
+
 @Composable
 private fun TransactionDialog(initial: DraftTransaction, onDismiss: () -> Unit, onSave: (DraftTransaction) -> Unit) {
-    var amount by remember(initial) { mutableStateOf(initial.amount) }; var title by remember(initial) { mutableStateOf(initial.title) }; var type by remember(initial) { mutableStateOf(initial.type) }
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("ตรวจรายการ") }, text = { Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    var amount by remember(initial) { mutableStateOf(initial.amount) }; var title by remember(initial) { mutableStateOf(initial.title) }; var type by remember(initial) { mutableStateOf(initial.type) }; var category by remember(initial) { mutableStateOf(initial.category) }; var remark by remember(initial) { mutableStateOf(initial.remark) }
+    val categories = listOf("อาหารและเครื่องดื่ม", "เดินทาง", "ของใช้/ช้อปปิ้ง", "บิล/สาธารณูปโภค", "สุขภาพ", "เงินเดือน", "โอนเงิน", "อื่น ๆ")
+    AlertDialog(onDismissRequest = onDismiss, title = { Text(if (initial.source == "slip_ocr") "สรุปจากสลิป" else "ตรวจรายการ") }, text = { Column(Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row { FilterChip(type == TransactionType.INCOME, { type = TransactionType.INCOME }, { Text("รายรับ") }); Spacer(Modifier.width(8.dp)); FilterChip(type == TransactionType.EXPENSE, { type = TransactionType.EXPENSE }, { Text("รายจ่าย") }) }
         OutlinedTextField(amount, { amount = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("จำนวนเงิน") }, singleLine = true)
         OutlinedTextField(title, { title = it }, label = { Text("รายการ/ร้านค้า") }, singleLine = true)
-    } }, confirmButton = { Button(enabled = amount.toDoubleOrNull()?.let { it > 0 } == true, onClick = { onSave(initial.copy(amount = amount, title = title, type = type)) }) { Text("บันทึก") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("ยกเลิก") } })
+        Text("หมวดที่แนะนำ", fontWeight = FontWeight.SemiBold)
+        categories.chunked(2).forEach { row -> Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { row.forEach { value -> FilterChip(category == value, { category = value }, { Text(value) }) } } }
+        OutlinedTextField(remark, { remark = it }, label = { Text("Remark / หมายเหตุ") }, minLines = 2)
+    } }, confirmButton = { Button(enabled = amount.toDoubleOrNull()?.let { it > 0 } == true, onClick = { onSave(initial.copy(amount = amount, title = title, type = type, category = category, remark = remark)) }) { Text("ยืนยันและบันทึก") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("ยกเลิก") } })
 }
 
 private fun sharedDraft(intent: Intent): DraftTransaction? {
