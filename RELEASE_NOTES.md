@@ -17,5 +17,5 @@
 
 ## Notes
 
-- Firebase Anonymous Authentication, Firestore rules, App Check, GitHub secrets, and a permanent signing key must be configured by the repository owner.
+- Firebase Email/Password, Google and Anonymous Authentication plus Firestore rules are configured; App Check and a permanent signing key still must be configured before public release.
 - OCR accuracy depends on slip layout; always verify amount and income/expense type.

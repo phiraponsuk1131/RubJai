@@ -16,3 +16,4 @@
 - Added email/password registration and sign-in, Google sign-in integration with safe missing-OAuth handling, and optional anonymous trial access.
 - Added a profile dialog for editing display name and optional phone, signing out, and storing owner-only profile data in Firestore.
 - Confirmed the Firebase project `rubjai-60e6d` and default Firestore database; collections are created automatically by the app.
+- Confirmed Firestore security rules were published and replaced the Firebase config with the post-Google-provider file containing an OAuth web client for Google sign-in.
