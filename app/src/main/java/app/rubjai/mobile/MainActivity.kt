@@ -1,6 +1,7 @@
 package app.rubjai.mobile
 
 import android.content.Intent
+import android.app.Activity
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -16,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ImageSearch
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -27,6 +29,11 @@ import androidx.compose.ui.unit.dp
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.common.api.ApiException
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseUser
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -51,7 +58,18 @@ enum class TransactionType { INCOME, EXPENSE }
 @Composable
 fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
     val context = LocalContext.current
+    val authRepository = remember { AuthRepository() }
+    var currentUser by remember { mutableStateOf<FirebaseUser?>(authRepository.auth.currentUser) }
+    DisposableEffect(authRepository) {
+        val listener = FirebaseAuth.AuthStateListener { currentUser = it.currentUser }
+        authRepository.auth.addAuthStateListener(listener)
+        onDispose { authRepository.auth.removeAuthStateListener(listener) }
+    }
     val colors = lightColorScheme(primary = Color(0xFF0B9B73), secondary = Color(0xFFFF6B57), background = Color(0xFFF4F7FA))
+    if (currentUser == null) {
+        MaterialTheme(colorScheme = colors) { AuthScreen(authRepository) }
+        return
+    }
     var entries by remember { mutableStateOf(emptyList<MoneyTransaction>()) }
     var draft by remember { mutableStateOf<DraftTransaction?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
@@ -60,6 +78,7 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
     var availableUpdate by remember { mutableStateOf<AppUpdateInfo?>(null) }
     var updateProgress by remember { mutableStateOf<Float?>(null) }
     var updateMessage by remember { mutableStateOf<String?>(null) }
+    var showProfile by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         repository.observe { entries = it }
@@ -80,7 +99,7 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
 
     MaterialTheme(colorScheme = colors) {
         Scaffold(
-            topBar = { Surface(color = Color(0xFF071A3D)) { Row(Modifier.fillMaxWidth().padding(20.dp), verticalAlignment = Alignment.CenterVertically) { Text("RubJai", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold); Spacer(Modifier.weight(1f)); Text("เงินของคุณ เข้าใจง่าย", color = Color(0xFFB9C8E5)) } } },
+            topBar = { Surface(color = Color(0xFF071A3D)) { Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) { Text("RubJai", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold); Spacer(Modifier.weight(1f)); IconButton(onClick = { showProfile = true }) { Icon(Icons.Default.AccountCircle, "โปรไฟล์", tint = Color.White) } } } },
             floatingActionButton = { FloatingActionButton(onClick = { draft = DraftTransaction() }) { Icon(Icons.Default.Add, "เพิ่มรายการ") } }
         ) { padding ->
             LazyColumn(Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp), contentPadding = PaddingValues(vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -116,7 +135,53 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
                 dismissButton = { if (updateProgress == null) TextButton(onClick = { availableUpdate = null }) { Text("ภายหลัง") } },
             )
         }
+        if (showProfile) ProfileDialog(authRepository, onDismiss = { showProfile = false })
     }
+}
+
+@Composable
+private fun AuthScreen(repository: AuthRepository) {
+    val context = LocalContext.current
+    var email by remember { mutableStateOf("") }; var password by remember { mutableStateOf("") }; var name by remember { mutableStateOf("") }
+    var creating by remember { mutableStateOf(false) }; var busy by remember { mutableStateOf(false) }; var error by remember { mutableStateOf<String?>(null) }
+    val googleLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == Activity.RESULT_OK) runCatching { GoogleSignIn.getSignedInAccountFromIntent(result.data).getResult(ApiException::class.java) }
+            .onSuccess { account -> busy = true; repository.signInGoogle(account) { busy = false; error = it } }
+            .onFailure { error = it.localizedMessage ?: "เข้าสู่ระบบ Google ไม่สำเร็จ" }
+    }
+    Surface(Modifier.fillMaxSize(), color = Color(0xFFF4F7FA)) {
+        Column(Modifier.fillMaxWidth().widthIn(max = 480.dp).padding(24.dp).verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            Spacer(Modifier.height(48.dp)); Text("RubJai", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold, color = Color(0xFF071A3D)); Text(if (creating) "สร้างบัญชีใหม่" else "เข้าสู่ระบบเพื่อซิงก์ข้อมูลของคุณ")
+            Spacer(Modifier.height(24.dp))
+            if (creating) OutlinedTextField(name, { name = it }, label = { Text("ชื่อที่แสดง") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+            OutlinedTextField(email, { email = it }, label = { Text("อีเมล") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+            OutlinedTextField(password, { password = it }, label = { Text("รหัสผ่านอย่างน้อย 6 ตัว") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+            error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            Spacer(Modifier.height(12.dp))
+            Button(enabled = !busy && email.isNotBlank() && password.length >= 6 && (!creating || name.isNotBlank()), onClick = { busy = true; if (creating) repository.createAccount(email, password, name) { busy = false; error = it } else repository.signIn(email, password) { busy = false; error = it } }, modifier = Modifier.fillMaxWidth()) { Text(if (creating) "สมัครสมาชิก" else "เข้าสู่ระบบ") }
+            TextButton(onClick = { creating = !creating; error = null }) { Text(if (creating) "มีบัญชีแล้ว? เข้าสู่ระบบ" else "ยังไม่มีบัญชี? สมัครสมาชิก") }
+            HorizontalDivider(); Spacer(Modifier.height(12.dp))
+            OutlinedButton(enabled = !busy, onClick = {
+                val id = context.resources.getIdentifier("default_web_client_id", "string", context.packageName)
+                if (id == 0) error = "กรุณาเปิด Google Sign-in ใน Firebase แล้วดาวน์โหลด google-services.json ใหม่"
+                else { val options = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN).requestIdToken(context.getString(id)).requestEmail().build(); googleLauncher.launch(GoogleSignIn.getClient(context, options).signInIntent) }
+            }, modifier = Modifier.fillMaxWidth()) { Text("ดำเนินการต่อด้วย Google") }
+            TextButton(enabled = !busy, onClick = { busy = true; repository.signInAnonymously { busy = false; error = it } }) { Text("ทดลองใช้แบบไม่สมัคร") }
+        }
+    }
+}
+
+@Composable
+private fun ProfileDialog(repository: AuthRepository, onDismiss: () -> Unit) {
+    var name by remember { mutableStateOf("") }; var phone by remember { mutableStateOf("") }; var message by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) { repository.loadProfile { savedName, savedPhone -> name = savedName; phone = savedPhone } }
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("โปรไฟล์") }, text = { Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(repository.auth.currentUser?.email ?: "บัญชีทดลอง", color = Color.Gray)
+        OutlinedTextField(name, { name = it }, label = { Text("ชื่อที่แสดง") }, singleLine = true)
+        OutlinedTextField(phone, { phone = it.filter { c -> c.isDigit() || c == '+' || c == '-' } }, label = { Text("เบอร์โทร (ไม่บังคับ)") }, singleLine = true)
+        message?.let { Text(it) }
+        TextButton(onClick = { repository.signOut(); onDismiss() }) { Text("ออกจากระบบ", color = MaterialTheme.colorScheme.error) }
+    } }, confirmButton = { Button(onClick = { repository.updateProfile(name, phone) { message = it ?: "บันทึกแล้ว" } }) { Text("บันทึก") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("ปิด") } })
 }
 
 @Composable

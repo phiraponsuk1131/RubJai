@@ -7,6 +7,7 @@
 - Import of bank notification text explicitly shared from LINE.
 - User-provided black-and-gold RubJai wallet, receipt, coins, and income/expense arrow launcher icon.
 - GitHub Release update popup with scrollable release notes and an in-app download progress bar.
+- Email/password registration, Google sign-in, anonymous trial access, and an editable user profile.
 
 ## Fixed and safety
 
