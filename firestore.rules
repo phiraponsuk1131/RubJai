@@ -23,6 +23,13 @@ service cloud.firestore {
           && request.resource.data.remark.size() <= 500;
         allow delete: if request.auth != null && request.auth.uid == userId;
       }
+      match /debts/{debtId} {
+        allow read, create, update, delete: if request.auth != null && request.auth.uid == userId;
+        match /payments/{paymentId} {
+          allow read, create: if request.auth != null && request.auth.uid == userId;
+          allow update, delete: if false;
+        }
+      }
     }
   }
 }

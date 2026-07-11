@@ -17,6 +17,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ImageSearch
 import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,6 +27,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
@@ -82,6 +86,7 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
     var updateProgress by remember { mutableStateOf<Float?>(null) }
     var updateMessage by remember { mutableStateOf<String?>(null) }
     var showProfile by remember { mutableStateOf(false) }
+    var showDebts by remember { mutableStateOf(false) }
     @Suppress("UNUSED_VARIABLE") val verificationRefresh = authRefresh
 
     LaunchedEffect(Unit) {
@@ -114,6 +119,7 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
                     }
                 }
                 item { QuickOverview(entries) }
+                item { OutlinedButton(onClick = { showDebts = true }, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.CreditCard, null); Spacer(Modifier.width(8.dp)); Text("แผนปลดหนี้") } }
                 item { Text("สแกนแล้ว RubJai จะสรุปยอด ร้านค้า หมวด และหมายเหตุให้อัตโนมัติ เพียงตรวจแล้วกดบันทึก", style = MaterialTheme.typography.bodySmall, color = Color.Gray) }
                 items(entries, key = { it.id }) { EntryRow(it) }
             }
@@ -141,7 +147,37 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
             )
         }
         if (showProfile) ProfileDialog(authRepository, onDismiss = { showProfile = false })
+        if (showDebts) Dialog(onDismissRequest = { showDebts = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) { Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { DebtPlannerScreen(onClose = { showDebts = false }) } }
     }
+}
+
+@Composable
+private fun DebtPlannerScreen(onClose: () -> Unit) {
+    val context = LocalContext.current; val repository = remember { DebtRepository() }
+    var debts by remember { mutableStateOf(emptyList<Debt>()) }; var create by remember { mutableStateOf(false) }; var target by remember { mutableStateOf<Debt?>(null) }; var draft by remember { mutableStateOf<DraftTransaction?>(null) }; var message by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) { repository.observe { debts = it } }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? -> if (uri != null) TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS).process(InputImage.fromFilePath(context, uri)).addOnSuccessListener { draft = SlipParser.parse(it.text, "debt_slip") }.addOnFailureListener { message = "อ่านสลิปไม่สำเร็จ" } }
+    Column(Modifier.fillMaxSize()) {
+        Surface(color = Color(0xFF071A3D)) { Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) { IconButton(onClick = onClose) { Icon(Icons.Default.ArrowBack, "กลับ", tint = Color.White) }; Text("แผนปลดหนี้", color = Color.White, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold); Spacer(Modifier.weight(1f)); IconButton(onClick = { create = true }) { Icon(Icons.Default.Add, "เพิ่มหนี้", tint = Color.White) } } }
+        LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
+            item { Text("ชำระทีละเดือน แล้วดูเส้นชัยของคุณ", style = MaterialTheme.typography.titleMedium); Text("ระยะเวลาเป็นการประมาณจากยอดล่าสุดและดอกเบี้ยที่กรอก", color = Color.Gray, style = MaterialTheme.typography.bodySmall) }
+            if (debts.isEmpty()) item { Card { Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) { Text("ยังไม่มีรายการหนี้"); TextButton(onClick = { create = true }) { Text("+ เพิ่มหนี้ก้อนแรก") } } } }
+            items(debts, key = { it.id }) { debt -> DebtCard(debt) { target = debt; picker.launch("image/*") } }
+        }
+    }
+    if (create) CreateDebtDialog({ create = false }) { name, balance, interest -> repository.add(name, balance, interest) { message = it ?: "เพิ่มหนี้แล้ว" }; create = false }
+    draft?.let { parsed -> AlertDialog(onDismissRequest = { draft = null }, title = { Text("ยืนยันตัดยอดหนี้") }, text = { Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) { Text(target?.name.orEmpty(), fontWeight = FontWeight.Bold); Text("ยอดจากสลิป ${parsed.amount.ifBlank { "อ่านไม่พบ" }} บาท"); Text("หมายเหตุ: ${parsed.remark.ifBlank { "ไม่มี" }}"); Text("ระบบจะกันสลิปซ้ำจากข้อมูลในสลิป") } }, confirmButton = { Button(enabled = parsed.amount.toDoubleOrNull()?.let { it > 0 } == true, onClick = { target?.let { repository.applySlip(it, parsed) { error -> message = error ?: "ตัดยอดหนี้แล้ว" } }; draft = null }) { Text("ยืนยันตัดยอด") } }, dismissButton = { TextButton(onClick = { draft = null }) { Text("ยกเลิก") } }) }
+    message?.let { AlertDialog(onDismissRequest = { message = null }, confirmButton = { TextButton(onClick = { message = null }) { Text("ตกลง") } }, text = { Text(it) }) }
+}
+
+@Composable private fun DebtCard(debt: Debt, pay: () -> Unit) {
+    val progress = if (debt.originalBalance > 0) (1 - debt.remainingBalance / debt.originalBalance).toFloat().coerceIn(0f, 1f) else 0f
+    Card { Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Row { Text(debt.name, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f)); Text(money(debt.remainingBalance), color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold) }; LinearProgressIndicator({ progress }, Modifier.fillMaxWidth()); Text("ชำระแล้ว ${(progress * 100).toInt()}% • ล่าสุด ${money(debt.latestPayment)}"); Text(debt.estimatedMonths()?.let { if (it == 0) "ปิดหนี้แล้ว" else "คาดว่าจะหมดในประมาณ $it เดือน" } ?: "ยอดล่าสุดยังไม่พอคำนวณระยะเวลา", fontWeight = FontWeight.SemiBold); Text(debt.encouragement(), color = Color(0xFF0B9B73)); Button(onClick = pay, modifier = Modifier.fillMaxWidth()) { Text("เลือกสลิปเพื่อตัดยอด") } } }
+}
+
+@Composable private fun CreateDebtDialog(dismiss: () -> Unit, save: (String, Double, Double) -> Unit) {
+    var name by remember { mutableStateOf("") }; var balance by remember { mutableStateOf("") }; var interest by remember { mutableStateOf("0") }
+    AlertDialog(onDismissRequest = dismiss, title = { Text("เพิ่มหนี้") }, text = { Column(verticalArrangement = Arrangement.spacedBy(10.dp)) { OutlinedTextField(name, { name = it }, label = { Text("ชื่อเจ้าหนี้/รายการ") }); OutlinedTextField(balance, { balance = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("ยอดหนี้ตั้งต้น") }); OutlinedTextField(interest, { interest = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("ดอกเบี้ยต่อปี % (ถ้าไม่มีใส่ 0)") }) } }, confirmButton = { Button(enabled = name.isNotBlank() && balance.toDoubleOrNull()?.let { it > 0 } == true, onClick = { save(name, balance.toDouble(), interest.toDoubleOrNull() ?: 0.0) }) { Text("บันทึก") } }, dismissButton = { TextButton(onClick = dismiss) { Text("ยกเลิก") } })
 }
 
 @Composable

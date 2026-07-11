@@ -1,4 +1,21 @@
-# RubJai v1.0.0
+# RubJai v1.1.0
+
+## Added in v1.1.0
+
+- Debt payoff plans with starting balance and optional annual interest.
+- Monthly payment-slip import, duplicate-slip protection, and automatic remaining-balance reduction.
+- Estimated payoff months from the latest payment and encouraging progress messages.
+- Automatic slip category and Remark/Note/Memo summary plus a more useful dashboard.
+- Firebase email-link verification gate and enlarged launcher icon crop.
+
+## Update and safety
+
+- Version `1.0.0` checks GitHub Releases and displays a scrollable `1.1.0` update popup with in-app download progress.
+- Debt data and payment slips are owner-only under Firestore rules.
+
+---
+
+## Previous release: RubJai v1.0.0
 
 ## Added
 

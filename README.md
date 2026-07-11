@@ -1,6 +1,6 @@
 # RubJai
 
-RubJai is an Android income and expense tracker built with Kotlin and Jetpack Compose. Package: `app.rubjai.mobile`; minSdk 23; targetSdk 36; version 1.0.0.
+RubJai is an Android income, expense, and debt-payoff tracker built with Kotlin and Jetpack Compose. Package: `app.rubjai.mobile`; minSdk 23; targetSdk 36; version 1.1.0.
 
 ## Features
 
@@ -11,6 +11,7 @@ RubJai is an Android income and expense tracker built with Kotlin and Jetpack Co
 - Show income, expenses, and current balance; sync transactions to each signed-in user's Firestore path.
 - Always show extracted data for confirmation before saving.
 - Check the public RubJai GitHub Release at startup and offer an in-app APK download with progress.
+- Create debts, apply a monthly payment from a selected slip, reject duplicate slips, estimate payoff months from the latest payment and annual interest, and show progress encouragement.
 
 RubJai cannot directly read private LINE chats. LINE does not expose a consumer API for another Android app to download personal bank chats. The safe supported flow is Share to RubJai. Notification or Accessibility scraping is intentionally excluded.
 
@@ -33,7 +34,7 @@ PowerShell can create the Firebase secret value with:
 
 ## Firestore schema
 
-`users/{uid}` stores the user's editable display name, email, and optional phone. `users/{uid}/transactions/{transactionId}` stores `id`, `amount`, `title`, `type` (`INCOME`/`EXPENSE`), `source`, limited `rawText`, and `createdAt`. Rules prevent users reading other users' data. Collections do not need to be created manually; the app creates them after the first successful write.
+`users/{uid}` stores the user's editable profile. Transactions live under `transactions`. Debt plans live under `debts/{debtId}`, with immutable slip payments under `debts/{debtId}/payments/{slipFingerprint}`. Rules prevent cross-user reads. Collections are created automatically.
 
 ## Build
 

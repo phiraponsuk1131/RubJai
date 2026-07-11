@@ -23,3 +23,8 @@
 - Added a more useful dashboard overview for transaction count and leading category.
 - Cropped only the empty outer margin from the user-provided launcher artwork so the original wallet icon appears larger without changing its design.
 - Prepared verified account email as the destination identity for a future monthly report feature; automated report delivery is not part of v1.0.0 yet.
+- Released signed `v1.0.0` with APK and SHA-256 through GitHub Releases.
+- Added debt plans with starting balance, optional annual interest, remaining balance and monthly payment history.
+- Added payment-slip application with duplicate-slip fingerprint protection and automatic balance reduction.
+- Added payoff-month estimation from the latest payment (including entered annual interest) and progress-based encouragement.
+- Bumped the app to `1.1.0`; devices on `1.0.0` will discover it through the GitHub Release update popup after release publication.
