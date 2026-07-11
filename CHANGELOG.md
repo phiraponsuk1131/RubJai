@@ -10,3 +10,5 @@
 - GitHub upload is pending because the local GitHub CLI authentication token is invalid and Firebase/signing secrets must be created first.
 - Added numeric GitHub Release update checks, a scroll-safe update popup, in-app download progress, and Android package installation handoff.
 - Replaced the launcher artwork with the user-provided black-and-gold wallet, coins, receipt, and income/expense arrows image without visual alteration.
+- Fixed the unavailable ML Kit Thai artifact by using the published on-device text recognition package; documented that Thai labels may require correction.
+- Added GitHub Actions debug/placeholder fallback so every push can produce an APK before owner secrets exist; production and tagged distribution still require real Firebase and signing secrets.

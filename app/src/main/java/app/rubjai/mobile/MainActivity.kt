@@ -26,7 +26,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
-import com.google.mlkit.vision.text.thai.ThaiTextRecognizerOptions
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -71,7 +71,7 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         if (uri != null) {
             busy = true
-            val recognizer = TextRecognition.getClient(ThaiTextRecognizerOptions.Builder().build())
+            val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
             recognizer.process(InputImage.fromFilePath(context, uri))
                 .addOnSuccessListener { result -> draft = SlipParser.parse(result.text, "slip_ocr"); busy = false }
                 .addOnFailureListener { error -> message = "อ่านสลิปไม่สำเร็จ: ${error.localizedMessage}"; busy = false }

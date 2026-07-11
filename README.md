@@ -5,7 +5,7 @@ RubJai is an Android income and expense tracker built with Kotlin and Jetpack Co
 ## Features
 
 - Add income, expenses, and salary manually.
-- Select a slip image and extract Thai text/amount locally with ML Kit OCR.
+- Select a slip image and extract amount text locally with ML Kit OCR; Thai labels may need manual correction because the bundled recognizer officially focuses on Latin-script text and digits.
 - Receive text or slip images through Android Share, including content explicitly shared from LINE.
 - Show income, expenses, and current balance; sync transactions to each signed-in user's Firestore path.
 - Always show extracted data for confirmation before saving.
@@ -43,6 +43,7 @@ gradle :app:assembleDebug
 ```
 
 GitHub Actions builds a signed release APK on every push without running tests. A `v*` tag also creates a GitHub Release using `RELEASE_NOTES.md`.
+Before secrets exist, Actions creates a debug artifact with a build-only Firebase placeholder. Configure the Firebase and signing secrets before distributing or tagging; only the signed build with the real Firebase config is a production APK.
 The in-app updater reads `https://github.com/phiraponsuk1131/RubJai/releases/latest`; Actions artifacts alone do not trigger update popups. The release must contain a public APK and its tag must be newer than `versionName`.
 
 ## Privacy

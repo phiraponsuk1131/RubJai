@@ -1,15 +1,15 @@
 {
   "project_info": {
-    "project_number": "REPLACE_ME",
-    "project_id": "REPLACE_ME",
-    "storage_bucket": "REPLACE_ME.firebasestorage.app"
+    "project_number": "123456789012",
+    "project_id": "rubjai-build-placeholder",
+    "storage_bucket": "rubjai-build-placeholder.firebasestorage.app"
   },
   "client": [{
     "client_info": {
-      "mobilesdk_app_id": "REPLACE_ME",
+      "mobilesdk_app_id": "1:123456789012:android:0000000000000000000000",
       "android_client_info": { "package_name": "app.rubjai.mobile" }
     },
-    "api_key": [{ "current_key": "REPLACE_ME" }]
+    "api_key": [{ "current_key": "AIzaSyBuildPlaceholderNotForProduction0000" }]
   }],
   "configuration_version": "1"
 }

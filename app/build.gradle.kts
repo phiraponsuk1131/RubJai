@@ -48,6 +48,6 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("com.google.firebase:firebase-auth")
     implementation("com.google.firebase:firebase-firestore")
-    implementation("com.google.mlkit:text-recognition-thai:16.0.1")
+    implementation("com.google.mlkit:text-recognition:16.0.1")
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
