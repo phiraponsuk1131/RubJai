@@ -1,6 +1,8 @@
 package app.rubjai.mobile
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -39,6 +41,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.core.content.ContextCompat
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
@@ -108,6 +111,9 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
     var showDebts by remember { mutableStateOf(false) }
     var entryPeriod by remember { mutableStateOf(EntryPeriod.MONTH) }
     var entryKind by remember { mutableStateOf(EntryKind.ALL) }
+    var autoScanEnabled by remember { mutableStateOf(AutoSlipScheduler.enabled(context)) }
+    var pendingSlips by remember { mutableStateOf(PendingSlipStore.load(context)) }
+    var showPending by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         repository.observe { entries = it }
         draft = sharedDraft(launchIntent)
@@ -128,6 +134,12 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
                 .addOnFailureListener { error -> message = "อ่านสลิปไม่สำเร็จ: ${error.localizedMessage}"; busy = false }
         }
     }
+    val scanPermission = if (android.os.Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_IMAGES else Manifest.permission.READ_EXTERNAL_STORAGE
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        autoScanEnabled = granted
+        AutoSlipScheduler.setEnabled(context, granted)
+        if (!granted) message = "ต้องอนุญาตการเข้าถึงรูปจึงจะตรวจสลิป K PLUS อัตโนมัติได้"
+    }
 
     MaterialTheme(colorScheme = colors) {
         Scaffold(
@@ -142,6 +154,7 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
                         Icon(Icons.Default.ImageSearch, null); Spacer(Modifier.width(8.dp)); Text(if (busy) "กำลังอ่านสลิป…" else "เลือกสลิปจากเครื่อง")
                     }
                 }
+                item { AutoScanCard(autoScanEnabled, pendingSlips.size, onToggle = { enable -> if (!enable) { AutoSlipScheduler.setEnabled(context, false); autoScanEnabled = false } else if (ContextCompat.checkSelfPermission(context, scanPermission) == PackageManager.PERMISSION_GRANTED) { AutoSlipScheduler.setEnabled(context, true); autoScanEnabled = true } else permissionLauncher.launch(scanPermission) }, onReview = { pendingSlips = PendingSlipStore.load(context); showPending = true }) }
                 item { QuickOverview(entries) }
                 item { OutlinedButton(onClick = { showDebts = true }, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.CreditCard, null); Spacer(Modifier.width(8.dp)); Text("แผนปลดหนี้") } }
                 item { Text("รายการของคุณ", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold); EntryFilters(entryPeriod, entryKind, { entryPeriod = it }, { entryKind = it }) }
@@ -152,6 +165,7 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
         }
         draft?.let { current -> TransactionDialog(current, onDismiss = { draft = null }, onSave = { busy = true; repository.add(it, onDone = { error -> busy = false; message = error ?: "บันทึกแล้ว" }); draft = null }) }
         message?.let { AlertDialog(onDismissRequest = { message = null }, confirmButton = { TextButton(onClick = { message = null }) { Text("ตกลง") } }, text = { Text(it) }) }
+        if (showPending) PendingSlipDialog(pendingSlips, onClose = { showPending = false }, onApprove = { pending -> repository.add(pending.draft) { error -> if (error == null) { PendingSlipStore.remove(context, pending.id); pendingSlips = PendingSlipStore.load(context); message = "บันทึกรายจ่ายแล้ว" } else message = error } }, onReject = { pending -> PendingSlipStore.remove(context, pending.id); pendingSlips = PendingSlipStore.load(context); if (pendingSlips.isEmpty()) showPending = false })
         availableUpdate?.let { update ->
             AlertDialog(
                 onDismissRequest = { if (updateProgress == null) availableUpdate = null },
@@ -281,6 +295,23 @@ private fun SummaryCard(entries: List<MoneyTransaction>) {
             Spacer(Modifier.height(16.dp)); Row { Text("รับ  ${money(income)}", color = Color(0xFF43E1A4)); Spacer(Modifier.weight(1f)); Text("จ่าย  ${money(expense)}", color = Color(0xFFFF8A78)) }
         }
     }
+}
+
+@Composable private fun AutoScanCard(enabled: Boolean, pendingCount: Int, onToggle: (Boolean) -> Unit, onReview: () -> Unit) {
+    Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F7F2))) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text("ตรวจสลิป K PLUS รายวัน", fontWeight = FontWeight.Bold); Text(if (enabled) "ตรวจเฉพาะรูปใหม่ ผลจะรอคุณอนุมัติ" else "ปิดอยู่ รูปจะไม่ถูกตรวจอัตโนมัติ", style = MaterialTheme.typography.bodySmall, color = Color.Gray) }; Switch(checked = enabled, onCheckedChange = onToggle, modifier = Modifier.semantics { contentDescription = "เปิดหรือปิดการตรวจสลิป K PLUS รายวัน" }) }
+            if (pendingCount > 0) Button(onClick = onReview, modifier = Modifier.fillMaxWidth()) { Text("ตรวจรายการรออนุมัติ $pendingCount รายการ") }
+        }
+    }
+}
+
+@Composable private fun PendingSlipDialog(items: List<PendingSlip>, onClose: () -> Unit, onApprove: (PendingSlip) -> Unit, onReject: (PendingSlip) -> Unit) {
+    AlertDialog(onDismissRequest = onClose, title = { Text("รายการ K PLUS รออนุมัติ") }, text = {
+        if (items.isEmpty()) Text("ไม่มีรายการรอตรวจ") else LazyColumn(Modifier.fillMaxWidth().heightIn(max = 460.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            items(items, key = { it.id }) { pending -> Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFF4F7FA))) { Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) { Text(pending.draft.title.ifBlank { "ไม่พบชื่อร้าน" }, fontWeight = FontWeight.Bold); Text("${pending.draft.amount} บาท", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold); Text(listOf(pending.draft.occurredAt, pending.draft.category).filter(String::isNotBlank).joinToString(" • "), style = MaterialTheme.typography.bodySmall); Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { TextButton(onClick = { onReject(pending) }) { Text("ลบออก") }; Button(onClick = { onApprove(pending) }) { Text("ยืนยันและเก็บ") } } } }
+        }
+    }, confirmButton = { TextButton(onClick = onClose) { Text("ปิด") } })
 }
 
 private fun List<MoneyTransaction>.filterFor(period: EntryPeriod, kind: EntryKind): List<MoneyTransaction> {

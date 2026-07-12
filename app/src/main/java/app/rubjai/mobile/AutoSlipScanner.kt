@@ -1,0 +1,89 @@
+package app.rubjai.mobile
+
+import android.content.ContentUris
+import android.content.Context
+import android.provider.MediaStore
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
+import androidx.work.Worker
+import androidx.work.WorkerParameters
+import com.google.android.gms.tasks.Tasks
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+import org.json.JSONArray
+import org.json.JSONObject
+import java.util.Calendar
+import java.util.UUID
+import java.util.concurrent.TimeUnit
+
+data class PendingSlip(val id: String, val draft: DraftTransaction)
+
+object PendingSlipStore {
+    private const val PREFS = "auto_kplus_scan"
+    private const val PENDING = "pending"
+    private const val PROCESSED = "processed"
+    private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+
+    @Synchronized fun load(context: Context): List<PendingSlip> = runCatching {
+        val array = JSONArray(prefs(context).getString(PENDING, "[]"))
+        (0 until array.length()).map { index -> array.getJSONObject(index).toPendingSlip() }
+    }.getOrDefault(emptyList())
+
+    @Synchronized fun add(context: Context, mediaId: String, draft: DraftTransaction) {
+        val processed = prefs(context).getStringSet(PROCESSED, emptySet()).orEmpty().toMutableSet()
+        if (!processed.add(mediaId)) return
+        val items = load(context).toMutableList().apply { add(PendingSlip(UUID.randomUUID().toString(), draft)) }
+        save(context, items)
+        prefs(context).edit().putStringSet(PROCESSED, processed.toList().takeLast(1000).toSet()).apply()
+    }
+
+    @Synchronized fun remove(context: Context, id: String) = save(context, load(context).filterNot { it.id == id })
+    private fun save(context: Context, items: List<PendingSlip>) { prefs(context).edit().putString(PENDING, JSONArray(items.map { it.toJson() }).toString()).apply() }
+    private fun PendingSlip.toJson() = JSONObject().put("id", id).put("amount", draft.amount).put("title", draft.title).put("rawText", draft.rawText.take(3000)).put("category", draft.category).put("remark", draft.remark).put("occurredAt", draft.occurredAt)
+    private fun JSONObject.toPendingSlip() = PendingSlip(getString("id"), DraftTransaction(optString("amount"), optString("title"), TransactionType.EXPENSE, "auto_kplus", optString("rawText"), optString("category", "อื่น ๆ"), optString("remark"), optString("occurredAt")))
+}
+
+object AutoSlipScheduler {
+    private const val WORK = "rubjai_daily_kplus_scan"
+    private const val PREFS = "auto_kplus_scan"
+    fun enabled(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean("enabled", false)
+    fun setEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean("enabled", enabled).apply()
+        val manager = WorkManager.getInstance(context)
+        if (!enabled) { manager.cancelUniqueWork(WORK); return }
+        val now = Calendar.getInstance(); val midnight = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, 1); set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0) }
+        val request = PeriodicWorkRequestBuilder<KPlusScanWorker>(24, TimeUnit.HOURS).setInitialDelay(midnight.timeInMillis - now.timeInMillis, TimeUnit.MILLISECONDS).build()
+        manager.enqueueUniquePeriodicWork(WORK, ExistingPeriodicWorkPolicy.UPDATE, request)
+        manager.enqueue(OneTimeWorkRequestBuilder<KPlusScanWorker>().build())
+    }
+}
+
+class KPlusScanWorker(context: Context, params: WorkerParameters) : Worker(context, params) {
+    override fun doWork(): Result {
+        if (!AutoSlipScheduler.enabled(applicationContext)) return Result.success()
+        val since = System.currentTimeMillis() / 1000 - TimeUnit.DAYS.toSeconds(2)
+        val projection = arrayOf(MediaStore.Images.Media._ID, MediaStore.Images.Media.DATE_ADDED)
+        val cursor = applicationContext.contentResolver.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, projection, "${MediaStore.Images.Media.DATE_ADDED} >= ?", arrayOf(since.toString()), "${MediaStore.Images.Media.DATE_ADDED} DESC") ?: return Result.success()
+        val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+        cursor.use {
+            val idColumn = it.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
+            var checked = 0
+            while (it.moveToNext() && checked++ < 40) {
+                val id = it.getLong(idColumn); val mediaKey = id.toString(); val uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id)
+                runCatching {
+                    val text = Tasks.await(recognizer.process(InputImage.fromFilePath(applicationContext, uri))).text
+                    val isKPlus = text.contains("K+", true) || Regex("[0-9]{10,}(?:CPM|DQR)[0-9]+", RegexOption.IGNORE_CASE).containsMatchIn(text)
+                    if (isKPlus) {
+                        val draft = SlipParser.parse(text, "auto_kplus")
+                        if (draft.amount.toDoubleOrNull()?.let { value -> value > 0 } == true) PendingSlipStore.add(applicationContext, mediaKey, draft)
+                    }
+                }
+            }
+        }
+        recognizer.close()
+        return Result.success()
+    }
+}

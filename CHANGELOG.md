@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.0
+
+- Added explicit opt-in daily scanning of recent gallery images for K PLUS slips only.
+- Added an on-device approval queue: users must choose `confirm and keep` before Firestore receives a transaction, or `remove` to discard it permanently from the queue.
+- Added processed-image tracking to prevent accepted or rejected K PLUS slips from returning as duplicates.
+- Scheduled approximate daily scanning with WorkManager; Android may defer execution beyond midnight for battery optimization.
+- Added a visible switch to disable automatic scanning at any time and clear permission messaging when access is denied.
+
 ## 1.2.2
 
 - Fixed automatic email-verification polling so the waiting screen closes immediately after Firebase reports a verified account.

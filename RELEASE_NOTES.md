@@ -1,4 +1,21 @@
-# RubJai v1.2.2
+# RubJai v1.3.0
+
+## Added in v1.3.0
+
+- Optional daily K PLUS-only scanning after the user explicitly grants photo access.
+- Results remain in an on-device approval queue and are not counted or uploaded until the user taps `confirm and keep`.
+- Users can reject a result with `remove`; processed slips are remembered to prevent repeated prompts.
+- Automatic work is scheduled near midnight with Android WorkManager and can be disabled at any time.
+
+## Privacy and limitations
+
+- OCR runs on-device. Pending scans stay local; only confirmed transactions are sent to the signed-in user's Firestore area.
+- Android can delay periodic work for battery optimization, so midnight is approximate rather than exact.
+- This release recognizes K PLUS only; no bank-specific automatic scanning was added for other slip formats.
+
+---
+
+## Previous release: RubJai v1.2.2
 
 ## Fixed in v1.2.2
 

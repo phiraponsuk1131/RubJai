@@ -1,6 +1,6 @@
 # RubJai
 
-RubJai is an Android income, expense, and debt-payoff tracker built with Kotlin and Jetpack Compose. Package: `app.rubjai.mobile`; minSdk 23; targetSdk 36; version 1.2.2.
+RubJai is an Android income, expense, and debt-payoff tracker built with Kotlin and Jetpack Compose. Package: `app.rubjai.mobile`; minSdk 23; targetSdk 36; version 1.3.0.
 
 ## Features
 
@@ -11,6 +11,7 @@ RubJai is an Android income, expense, and debt-payoff tracker built with Kotlin 
 - Register or sign in with email/password, confirm Firebase's email verification link, and edit display name and phone in a scroll-safe profile dialog.
 - Show income, expenses, and current balance; sync transactions to each signed-in user's Firestore path.
 - Always show extracted data for confirmation before saving.
+- Optional daily K PLUS-only gallery scanning. New results stay in a local approval queue until the user confirms and uploads the transaction or rejects it.
 - Check the public RubJai GitHub Release at startup and offer an in-app APK download with progress.
 - Filter the scrollable transaction history by today, week, month, or all records and by income or expense.
 - Create debts, apply a monthly payment from a selected slip, reject duplicate slips, show payment history with date/time, estimate payoff months from the latest payment and annual interest, and show progress encouragement.
@@ -52,6 +53,6 @@ The in-app updater reads `https://github.com/phiraponsuk1131/RubJai/releases/lat
 
 ## Privacy
 
-Slip selection and LINE sharing are user-initiated. OCR runs on the device. Only a confirmed transaction and at most 3,000 characters of source text are uploaded to the user's Firestore area. RubJai never automatically scans all photos or reads LINE chats.
+Manual slip selection and LINE sharing are user-initiated. The optional K PLUS daily scanner requires explicit photo permission, checks only recent images on the device, and can be disabled at any time. OCR and the pending approval queue remain on-device. Only a user-confirmed transaction and at most 3,000 characters of source text are uploaded to the user's Firestore area. RubJai never reads LINE chats.
 
 Admin-only destructive controls are hidden unless the signed-in Firebase ID token contains the custom claim `admin: true`. Admin passwords are never stored in source code, Firestore, GitHub, or the APK.
