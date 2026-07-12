@@ -1,4 +1,17 @@
-# RubJai v1.1.1
+# RubJai v1.2.0
+
+## Added and fixed in v1.2.0
+
+- The `+` button now adds income directly as a number; income does not require a slip.
+- Expense slips automatically map merchant name, positive amount, time, category, and remark.
+- Scanned expense and debt-slip dialogs no longer ask the user to type an amount.
+- Non-slip images and unreadable slips are rejected with a clear message.
+- Main and debt headers respect the Android status bar.
+- Uses the latest user-provided launcher image directly.
+
+---
+
+## Previous release: RubJai v1.1.1
 
 ## Fixed in v1.1.1
 

@@ -20,7 +20,9 @@ service cloud.firestore {
           && request.resource.data.category is string
           && request.resource.data.category.size() <= 50
           && request.resource.data.remark is string
-          && request.resource.data.remark.size() <= 500;
+          && request.resource.data.remark.size() <= 500
+          && request.resource.data.occurredAt is string
+          && request.resource.data.occurredAt.size() <= 50;
         allow delete: if request.auth != null && request.auth.uid == userId;
       }
       match /debts/{debtId} {

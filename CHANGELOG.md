@@ -31,3 +31,14 @@
 - Fixed password fields to hide input by default with an explicit eye toggle.
 - Fixed verified accounts remaining stuck on the waiting screen by automatically reloading Firebase verification state every 2.5 seconds.
 - Prepared patch version `1.1.1` for the centered launcher crop and authentication UX fixes.
+
+## 2026-07-12
+
+- Diagnosed missing K PLUS amounts: the old parser required Thai labels that the Latin OCR model often omits even when it recognizes `15.00` or `29.00`.
+- Added a safe positive-decimal fallback, time extraction, merchant-name mapping, category and remark mapping for scanned expense slips.
+- Separated flows: the `+` button adds numeric income, while selected slips always create expense summaries without editable amount fields.
+- Rejected non-slip images and unreadable slips in both the dashboard and debt payment flow.
+- Added safe status-bar insets to the main and debt app bars.
+- Replaced the launcher asset directly with the latest user-provided centered image without additional cropping.
+- Bumped the app to `1.2.0` for the new scan and UI behavior.
+- Updated the project agreement to avoid repeated conversational approval requests for the already-authorized RubJai delivery workflow and to keep reports token-efficient.

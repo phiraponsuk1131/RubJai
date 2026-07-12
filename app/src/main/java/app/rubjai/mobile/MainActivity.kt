@@ -58,6 +58,7 @@ data class DraftTransaction(
     val rawText: String = "",
     val category: String = "อื่น ๆ",
     val remark: String = "",
+    val occurredAt: String = "",
 )
 
 enum class TransactionType { INCOME, EXPENSE }
@@ -106,15 +107,19 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
             busy = true
             val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
             recognizer.process(InputImage.fromFilePath(context, uri))
-                .addOnSuccessListener { result -> draft = SlipParser.parse(result.text, "slip_ocr"); busy = false }
+                .addOnSuccessListener { result ->
+                    val parsed = SlipParser.parse(result.text, "slip_ocr")
+                    if (parsed.amount.toDoubleOrNull()?.let { it > 0 } == true) draft = parsed else message = "อ่านยอดจากรูปไม่พบ กรุณาเลือกภาพสลิปที่ชัดเจน"
+                    busy = false
+                }
                 .addOnFailureListener { error -> message = "อ่านสลิปไม่สำเร็จ: ${error.localizedMessage}"; busy = false }
         }
     }
 
     MaterialTheme(colorScheme = colors) {
         Scaffold(
-            topBar = { Surface(color = Color(0xFF071A3D)) { Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) { Text("RubJai", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold); Spacer(Modifier.weight(1f)); IconButton(onClick = { showProfile = true }) { Icon(Icons.Default.AccountCircle, "โปรไฟล์", tint = Color.White) } } } },
-            floatingActionButton = { FloatingActionButton(onClick = { draft = DraftTransaction() }) { Icon(Icons.Default.Add, "เพิ่มรายการ") } }
+            topBar = { Surface(color = Color(0xFF071A3D)) { Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) { Text("RubJai", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold); Spacer(Modifier.weight(1f)); IconButton(onClick = { showProfile = true }) { Icon(Icons.Default.AccountCircle, "โปรไฟล์", tint = Color.White) } } } },
+            floatingActionButton = { FloatingActionButton(onClick = { draft = DraftTransaction(type = TransactionType.INCOME, source = "manual_income", category = "รายรับ") }) { Icon(Icons.Default.Add, "เพิ่มรายรับ") } }
         ) { padding ->
             LazyColumn(Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp), contentPadding = PaddingValues(vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 item { SummaryCard(entries) }
@@ -125,7 +130,7 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
                 }
                 item { QuickOverview(entries) }
                 item { OutlinedButton(onClick = { showDebts = true }, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.CreditCard, null); Spacer(Modifier.width(8.dp)); Text("แผนปลดหนี้") } }
-                item { Text("สแกนแล้ว RubJai จะสรุปยอด ร้านค้า หมวด และหมายเหตุให้อัตโนมัติ เพียงตรวจแล้วกดบันทึก", style = MaterialTheme.typography.bodySmall, color = Color.Gray) }
+                item { Text("ปุ่ม + ใช้เพิ่มรายรับด้วยตัวเลข ส่วนรายจ่ายให้เลือกสลิป แล้ว RubJai จะอ่านร้าน ยอด เวลา หมวด และหมายเหตุอัตโนมัติ", style = MaterialTheme.typography.bodySmall, color = Color.Gray) }
                 items(entries, key = { it.id }) { EntryRow(it) }
             }
         }
@@ -161,9 +166,9 @@ private fun DebtPlannerScreen(onClose: () -> Unit) {
     val context = LocalContext.current; val repository = remember { DebtRepository() }
     var debts by remember { mutableStateOf(emptyList<Debt>()) }; var create by remember { mutableStateOf(false) }; var target by remember { mutableStateOf<Debt?>(null) }; var draft by remember { mutableStateOf<DraftTransaction?>(null) }; var message by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) { repository.observe { debts = it } }
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? -> if (uri != null) TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS).process(InputImage.fromFilePath(context, uri)).addOnSuccessListener { draft = SlipParser.parse(it.text, "debt_slip") }.addOnFailureListener { message = "อ่านสลิปไม่สำเร็จ" } }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? -> if (uri != null) TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS).process(InputImage.fromFilePath(context, uri)).addOnSuccessListener { result -> val parsed = SlipParser.parse(result.text, "debt_slip"); if (parsed.amount.toDoubleOrNull()?.let { it > 0 } == true) draft = parsed else message = "อ่านยอดจากสลิปไม่พบ กรุณาเลือกสลิปที่ชัดเจน" }.addOnFailureListener { message = "อ่านสลิปไม่สำเร็จ" } }
     Column(Modifier.fillMaxSize()) {
-        Surface(color = Color(0xFF071A3D)) { Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) { IconButton(onClick = onClose) { Icon(Icons.Default.ArrowBack, "กลับ", tint = Color.White) }; Text("แผนปลดหนี้", color = Color.White, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold); Spacer(Modifier.weight(1f)); IconButton(onClick = { create = true }) { Icon(Icons.Default.Add, "เพิ่มหนี้", tint = Color.White) } } }
+        Surface(color = Color(0xFF071A3D)) { Row(Modifier.fillMaxWidth().statusBarsPadding().padding(10.dp), verticalAlignment = Alignment.CenterVertically) { IconButton(onClick = onClose) { Icon(Icons.Default.ArrowBack, "กลับ", tint = Color.White) }; Text("แผนปลดหนี้", color = Color.White, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold); Spacer(Modifier.weight(1f)); IconButton(onClick = { create = true }) { Icon(Icons.Default.Add, "เพิ่มหนี้", tint = Color.White) } } }
         LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
             item { Text("ชำระทีละเดือน แล้วดูเส้นชัยของคุณ", style = MaterialTheme.typography.titleMedium); Text("ระยะเวลาเป็นการประมาณจากยอดล่าสุดและดอกเบี้ยที่กรอก", color = Color.Gray, style = MaterialTheme.typography.bodySmall) }
             if (debts.isEmpty()) item { Card { Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) { Text("ยังไม่มีรายการหนี้"); TextButton(onClick = { create = true }) { Text("+ เพิ่มหนี้ก้อนแรก") } } } }
@@ -171,7 +176,7 @@ private fun DebtPlannerScreen(onClose: () -> Unit) {
         }
     }
     if (create) CreateDebtDialog({ create = false }) { name, balance, interest -> repository.add(name, balance, interest) { message = it ?: "เพิ่มหนี้แล้ว" }; create = false }
-    draft?.let { parsed -> AlertDialog(onDismissRequest = { draft = null }, title = { Text("ยืนยันตัดยอดหนี้") }, text = { Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) { Text(target?.name.orEmpty(), fontWeight = FontWeight.Bold); Text("ยอดจากสลิป ${parsed.amount.ifBlank { "อ่านไม่พบ" }} บาท"); Text("หมายเหตุ: ${parsed.remark.ifBlank { "ไม่มี" }}"); Text("ระบบจะกันสลิปซ้ำจากข้อมูลในสลิป") } }, confirmButton = { Button(enabled = parsed.amount.toDoubleOrNull()?.let { it > 0 } == true, onClick = { target?.let { repository.applySlip(it, parsed) { error -> message = error ?: "ตัดยอดหนี้แล้ว" } }; draft = null }) { Text("ยืนยันตัดยอด") } }, dismissButton = { TextButton(onClick = { draft = null }) { Text("ยกเลิก") } }) }
+    draft?.let { parsed -> AlertDialog(onDismissRequest = { draft = null }, title = { Text("ยืนยันตัดยอดหนี้") }, text = { Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) { Text(target?.name.orEmpty(), fontWeight = FontWeight.Bold); Text("ร้าน/ผู้รับ: ${parsed.title.ifBlank { "ไม่ระบุ" }}"); Text("ยอด ${parsed.amount} บาท", fontWeight = FontWeight.Bold); if (parsed.occurredAt.isNotBlank()) Text("เวลา: ${parsed.occurredAt}"); Text("ระบบจะกันสลิปซ้ำจากข้อมูลในสลิป") } }, confirmButton = { Button(onClick = { target?.let { repository.applySlip(it, parsed) { error -> message = error ?: "ตัดยอดหนี้แล้ว" } }; draft = null }) { Text("ยืนยันตัดยอด") } }, dismissButton = { TextButton(onClick = { draft = null }) { Text("ยกเลิก") } }) }
     message?.let { AlertDialog(onDismissRequest = { message = null }, confirmButton = { TextButton(onClick = { message = null }) { Text("ตกลง") } }, text = { Text(it) }) }
 }
 
@@ -246,7 +251,7 @@ private fun SummaryCard(entries: List<MoneyTransaction>) {
     }
 }
 
-@Composable private fun EntryRow(item: MoneyTransaction) { Card { Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(item.title.ifBlank { "ไม่ระบุรายการ" }, fontWeight = FontWeight.SemiBold); Text(item.source, style = MaterialTheme.typography.bodySmall, color = Color.Gray) }; Text((if (item.type == "INCOME") "+" else "-") + money(item.amount), color = if (item.type == "INCOME") Color(0xFF0B9B73) else Color(0xFFD84A3A), fontWeight = FontWeight.Bold) } } }
+@Composable private fun EntryRow(item: MoneyTransaction) { Card { Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(item.title.ifBlank { "ไม่ระบุรายการ" }, fontWeight = FontWeight.SemiBold); Text(listOf(item.category, item.occurredAt).filter(String::isNotBlank).joinToString(" • "), style = MaterialTheme.typography.bodySmall, color = Color.Gray) }; Text((if (item.type == "INCOME") "+" else "-") + money(item.amount), color = if (item.type == "INCOME") Color(0xFF0B9B73) else Color(0xFFD84A3A), fontWeight = FontWeight.Bold) } } }
 
 @Composable private fun QuickOverview(entries: List<MoneyTransaction>) {
     val top = entries.groupBy { it.category }.maxByOrNull { it.value.sumOf(MoneyTransaction::amount) }?.key ?: "ยังไม่มีข้อมูล"
@@ -258,16 +263,21 @@ private fun SummaryCard(entries: List<MoneyTransaction>) {
 
 @Composable
 private fun TransactionDialog(initial: DraftTransaction, onDismiss: () -> Unit, onSave: (DraftTransaction) -> Unit) {
-    var amount by remember(initial) { mutableStateOf(initial.amount) }; var title by remember(initial) { mutableStateOf(initial.title) }; var type by remember(initial) { mutableStateOf(initial.type) }; var category by remember(initial) { mutableStateOf(initial.category) }; var remark by remember(initial) { mutableStateOf(initial.remark) }
-    val categories = listOf("อาหารและเครื่องดื่ม", "เดินทาง", "ของใช้/ช้อปปิ้ง", "บิล/สาธารณูปโภค", "สุขภาพ", "เงินเดือน", "โอนเงิน", "อื่น ๆ")
-    AlertDialog(onDismissRequest = onDismiss, title = { Text(if (initial.source == "slip_ocr") "สรุปจากสลิป" else "ตรวจรายการ") }, text = { Column(Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row { FilterChip(type == TransactionType.INCOME, { type = TransactionType.INCOME }, { Text("รายรับ") }); Spacer(Modifier.width(8.dp)); FilterChip(type == TransactionType.EXPENSE, { type = TransactionType.EXPENSE }, { Text("รายจ่าย") }) }
-        OutlinedTextField(amount, { amount = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("จำนวนเงิน") }, singleLine = true)
-        OutlinedTextField(title, { title = it }, label = { Text("รายการ/ร้านค้า") }, singleLine = true)
-        Text("หมวดที่แนะนำ", fontWeight = FontWeight.SemiBold)
-        categories.chunked(2).forEach { row -> Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { row.forEach { value -> FilterChip(category == value, { category = value }, { Text(value) }) } } }
-        OutlinedTextField(remark, { remark = it }, label = { Text("Remark / หมายเหตุ") }, minLines = 2)
-    } }, confirmButton = { Button(enabled = amount.toDoubleOrNull()?.let { it > 0 } == true, onClick = { onSave(initial.copy(amount = amount, title = title, type = type, category = category, remark = remark)) }) { Text("ยืนยันและบันทึก") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("ยกเลิก") } })
+    var amount by remember(initial) { mutableStateOf(initial.amount) }; var title by remember(initial) { mutableStateOf(initial.title) }
+    val manualIncome = initial.source == "manual_income"
+    AlertDialog(onDismissRequest = onDismiss, title = { Text(if (manualIncome) "เพิ่มรายรับ" else "สรุปจากสลิป") }, text = { Column(Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        if (manualIncome) {
+            OutlinedTextField(amount, { amount = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("จำนวนเงินรายรับ") }, singleLine = true)
+            OutlinedTextField(title, { title = it }, label = { Text("ชื่อรายรับ เช่น เงินเดือน") }, singleLine = true)
+        } else {
+            Text(title.ifBlank { "ไม่พบชื่อร้าน" }, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text("${amount} บาท", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+            if (initial.occurredAt.isNotBlank()) Text("วันที่/เวลา ${initial.occurredAt}")
+            Text("หมวด ${initial.category}")
+            if (initial.remark.isNotBlank()) Text("หมายเหตุ ${initial.remark}")
+            Text("ข้อมูลอ่านจากรูปอัตโนมัติ หากไม่ถูกต้องให้ยกเลิกและเลือกสลิปที่ชัดกว่า", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+        }
+    } }, confirmButton = { Button(enabled = amount.toDoubleOrNull()?.let { it > 0 } == true, onClick = { onSave(initial.copy(amount = amount, title = title, type = if (manualIncome) TransactionType.INCOME else TransactionType.EXPENSE, category = if (manualIncome && title.contains("เงินเดือน", true)) "เงินเดือน" else initial.category)) }) { Text(if (manualIncome) "บันทึกรายรับ" else "บันทึกรายจ่าย") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("ยกเลิก") } })
 }
 
 private fun sharedDraft(intent: Intent): DraftTransaction? {

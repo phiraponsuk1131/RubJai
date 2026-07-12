@@ -16,6 +16,7 @@ data class MoneyTransaction(
     val rawText: String = "",
     val category: String = "อื่น ๆ",
     val remark: String = "",
+    val occurredAt: String = "",
     @ServerTimestamp val createdAt: Date? = null,
 )
 
@@ -35,7 +36,7 @@ class TransactionRepository {
 
     fun add(draft: DraftTransaction, onDone: (String?) -> Unit) = withUser { uid ->
         val id = UUID.randomUUID().toString()
-        val item = MoneyTransaction(id, draft.amount.toDouble(), draft.title.trim(), draft.type.name, draft.source, draft.rawText.take(3000), draft.category, draft.remark.take(500), Date())
+        val item = MoneyTransaction(id, draft.amount.toDouble(), draft.title.trim(), draft.type.name, draft.source, draft.rawText.take(3000), draft.category, draft.remark.take(500), draft.occurredAt, Date())
         db.collection("users").document(uid).collection("transactions").document(id).set(item)
             .addOnSuccessListener { onDone(null) }.addOnFailureListener { onDone(it.localizedMessage ?: "บันทึกไม่สำเร็จ") }
     }

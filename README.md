@@ -1,11 +1,12 @@
 # RubJai
 
-RubJai is an Android income, expense, and debt-payoff tracker built with Kotlin and Jetpack Compose. Package: `app.rubjai.mobile`; minSdk 23; targetSdk 36; version 1.1.1.
+RubJai is an Android income, expense, and debt-payoff tracker built with Kotlin and Jetpack Compose. Package: `app.rubjai.mobile`; minSdk 23; targetSdk 36; version 1.2.0.
 
 ## Features
 
-- Add income, expenses, and salary manually.
-- Select a slip image and extract amount text locally with ML Kit OCR; Thai labels may need manual correction because the bundled recognizer officially focuses on Latin-script text and digits.
+- Add income or salary directly as a number; income does not require a slip.
+- Expenses come from a user-selected slip. RubJai automatically maps the merchant name, positive decimal amount, time, category, and remark; no amount input is shown for scanned expenses.
+- Non-slip images or images with no readable positive amount are rejected instead of opening an empty amount form.
 - Receive text or slip images through Android Share, including content explicitly shared from LINE.
 - Register or sign in with email/password, confirm Firebase's email verification link, and edit display name and phone in a scroll-safe profile dialog.
 - Show income, expenses, and current balance; sync transactions to each signed-in user's Firestore path.
