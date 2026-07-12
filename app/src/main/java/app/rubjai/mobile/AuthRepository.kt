@@ -3,6 +3,9 @@ package app.rubjai.mobile
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.UserProfileChangeRequest
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.android.gms.tasks.Task
+import com.google.android.gms.tasks.Tasks
+import com.google.firebase.firestore.QuerySnapshot
 
 class AuthRepository {
     val auth: FirebaseAuth = FirebaseAuth.getInstance()
@@ -41,4 +44,29 @@ class AuthRepository {
     }
 
     fun signOut() = auth.signOut()
+
+    fun checkAdmin(done: (Boolean) -> Unit) {
+        auth.currentUser?.getIdToken(true)?.addOnSuccessListener { done(it.claims["admin"] == true) }
+            ?.addOnFailureListener { done(false) } ?: done(false)
+    }
+
+    fun deleteAccountAndData(done: (String?) -> Unit) {
+        val user = auth.currentUser ?: return done("ไม่พบบัญชี")
+        val root = db.collection("users").document(user.uid)
+        val transactionTask = root.collection("transactions").get()
+        val debtTask = root.collection("debts").get()
+        Tasks.whenAll(transactionTask, debtTask).addOnSuccessListener {
+            val paymentTasks: List<Task<QuerySnapshot>> = debtTask.result.documents.map { it.reference.collection("payments").get() }
+            Tasks.whenAll(paymentTasks).addOnSuccessListener {
+                val batch = db.batch()
+                transactionTask.result.documents.forEach { batch.delete(it.reference) }
+                paymentTasks.forEach { task -> task.result.documents.forEach { batch.delete(it.reference) } }
+                debtTask.result.documents.forEach { batch.delete(it.reference) }
+                batch.delete(root)
+                batch.commit().addOnSuccessListener {
+                    user.delete().addOnSuccessListener { done(null) }.addOnFailureListener { done("ลบข้อมูลแล้ว แต่ลบบัญชีไม่สำเร็จ กรุณาเข้าสู่ระบบใหม่แล้วลองอีกครั้ง") }
+                }.addOnFailureListener { done(it.localizedMessage ?: "ลบข้อมูลไม่สำเร็จ") }
+            }.addOnFailureListener { done(it.localizedMessage ?: "อ่านข้อมูลชำระหนี้ไม่สำเร็จ") }
+        }.addOnFailureListener { done(it.localizedMessage ?: "อ่านข้อมูลบัญชีไม่สำเร็จ") }
+    }
 }

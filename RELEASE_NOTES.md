@@ -1,4 +1,14 @@
-# RubJai v1.2.0
+# RubJai v1.2.1
+
+## Added in v1.2.1
+
+- Admin-only account and owned-data deletion control protected by Firebase custom claim `admin: true`.
+- Deletes the signed-in account's transactions, debts, debt-payment slips, profile document, and Authentication account after confirmation.
+- Admin credentials are never embedded in the APK.
+
+---
+
+## Previous release: RubJai v1.2.0
 
 ## Added and fixed in v1.2.0
 

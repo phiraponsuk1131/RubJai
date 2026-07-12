@@ -228,15 +228,17 @@ private fun VerifyEmailScreen(repository: AuthRepository, email: String, onVerif
 
 @Composable
 private fun ProfileDialog(repository: AuthRepository, onDismiss: () -> Unit) {
-    var name by remember { mutableStateOf("") }; var phone by remember { mutableStateOf("") }; var message by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(Unit) { repository.loadProfile { savedName, savedPhone -> name = savedName; phone = savedPhone } }
+    var name by remember { mutableStateOf("") }; var phone by remember { mutableStateOf("") }; var message by remember { mutableStateOf<String?>(null) }; var confirmDelete by remember { mutableStateOf(false) }; var deleting by remember { mutableStateOf(false) }; var isAdmin by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { repository.loadProfile { savedName, savedPhone -> name = savedName; phone = savedPhone }; repository.checkAdmin { isAdmin = it } }
     AlertDialog(onDismissRequest = onDismiss, title = { Text("โปรไฟล์") }, text = { Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(repository.auth.currentUser?.email ?: "บัญชีทดลอง", color = Color.Gray)
         OutlinedTextField(name, { name = it }, label = { Text("ชื่อที่แสดง") }, singleLine = true)
         OutlinedTextField(phone, { phone = it.filter { c -> c.isDigit() || c == '+' || c == '-' } }, label = { Text("เบอร์โทร (ไม่บังคับ)") }, singleLine = true)
         message?.let { Text(it) }
         TextButton(onClick = { repository.signOut(); onDismiss() }) { Text("ออกจากระบบ", color = MaterialTheme.colorScheme.error) }
+        if (isAdmin) TextButton(onClick = { confirmDelete = true }) { Text("ลบบัญชีและข้อมูลของฉัน", color = MaterialTheme.colorScheme.error) }
     } }, confirmButton = { Button(onClick = { repository.updateProfile(name, phone) { message = it ?: "บันทึกแล้ว" } }) { Text("บันทึก") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("ปิด") } })
+    if (confirmDelete) AlertDialog(onDismissRequest = { if (!deleting) confirmDelete = false }, title = { Text("ลบบัญชีถาวร?") }, text = { Text("รายการรายรับรายจ่าย หนี้ สลิปชำระ โปรไฟล์ และบัญชีเข้าสู่ระบบจะถูกลบทั้งหมดและกู้คืนไม่ได้") }, confirmButton = { Button(enabled = !deleting, onClick = { deleting = true; repository.deleteAccountAndData { error -> deleting = false; if (error == null) onDismiss() else message = error; confirmDelete = false } }, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)) { Text(if (deleting) "กำลังลบ…" else "ลบถาวร") } }, dismissButton = { TextButton(enabled = !deleting, onClick = { confirmDelete = false }) { Text("ยกเลิก") } })
 }
 
 @Composable

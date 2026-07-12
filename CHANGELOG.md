@@ -42,3 +42,5 @@
 - Replaced the launcher asset directly with the latest user-provided centered image without additional cropping.
 - Bumped the app to `1.2.0` for the new scan and UI behavior.
 - Updated the project agreement to avoid repeated conversational approval requests for the already-authorized RubJai delivery workflow and to keep reports token-efficient.
+- Added an account-and-owned-data deletion workflow, hidden unless Firebase returns the secure custom claim `admin: true`; rejected hardcoded admin credentials because APKs can be reverse engineered.
+- Assigned Firebase custom claim `admin: true` to the user-provided UID using the local service account without committing credentials.

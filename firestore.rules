@@ -6,6 +6,7 @@ service cloud.firestore {
       allow create, update: if request.auth != null && request.auth.uid == userId
         && (!('displayName' in request.resource.data) || (request.resource.data.displayName is string && request.resource.data.displayName.size() <= 100))
         && (!('phone' in request.resource.data) || (request.resource.data.phone is string && request.resource.data.phone.size() <= 30));
+      allow delete: if request.auth != null && request.auth.uid == userId;
       match /transactions/{transactionId} {
         allow read: if request.auth != null && request.auth.uid == userId;
         allow create, update: if request.auth != null
@@ -29,7 +30,8 @@ service cloud.firestore {
         allow read, create, update, delete: if request.auth != null && request.auth.uid == userId;
         match /payments/{paymentId} {
           allow read, create: if request.auth != null && request.auth.uid == userId;
-          allow update, delete: if false;
+          allow update: if false;
+          allow delete: if request.auth != null && request.auth.uid == userId;
         }
       }
     }

@@ -1,6 +1,6 @@
 # RubJai
 
-RubJai is an Android income, expense, and debt-payoff tracker built with Kotlin and Jetpack Compose. Package: `app.rubjai.mobile`; minSdk 23; targetSdk 36; version 1.2.0.
+RubJai is an Android income, expense, and debt-payoff tracker built with Kotlin and Jetpack Compose. Package: `app.rubjai.mobile`; minSdk 23; targetSdk 36; version 1.2.1.
 
 ## Features
 
@@ -52,3 +52,5 @@ The in-app updater reads `https://github.com/phiraponsuk1131/RubJai/releases/lat
 ## Privacy
 
 Slip selection and LINE sharing are user-initiated. OCR runs on the device. Only a confirmed transaction and at most 3,000 characters of source text are uploaded to the user's Firestore area. RubJai never automatically scans all photos or reads LINE chats.
+
+Admin-only destructive controls are hidden unless the signed-in Firebase ID token contains the custom claim `admin: true`. Admin passwords are never stored in source code, Firestore, GitHub, or the APK.
