@@ -41,6 +41,11 @@ object PendingSlipStore {
         prefs(context).edit().putStringSet(PROCESSED, processed.toList().takeLast(1000).toSet()).apply()
     }
 
+    fun isProcessed(context: Context, mediaId: String) = prefs(context).getStringSet(PROCESSED, emptySet()).orEmpty().contains(mediaId)
+    @Synchronized fun markProcessed(context: Context, mediaId: String) {
+        val processed = prefs(context).getStringSet(PROCESSED, emptySet()).orEmpty().toMutableSet().apply { add(mediaId) }
+        prefs(context).edit().putStringSet(PROCESSED, processed.toList().takeLast(1000).toSet()).apply()
+    }
     @Synchronized fun remove(context: Context, id: String) = save(context, load(context).filterNot { it.id == id })
     @Synchronized fun clearUsage(context: Context) { prefs(context).edit().remove(PENDING).remove(PROCESSED).apply() }
     private fun save(context: Context, items: List<PendingSlip>) { prefs(context).edit().putString(PENDING, JSONArray(items.map { it.toJson() }).toString()).apply() }
@@ -57,14 +62,21 @@ object AutoSlipScheduler {
         val manager = WorkManager.getInstance(context)
         if (!enabled) { manager.cancelUniqueWork(WORK); return }
         val now = Calendar.getInstance()
-        val dailyRun = Calendar.getInstance().apply { set(Calendar.HOUR_OF_DAY, 23); set(Calendar.MINUTE, 30); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0); if (!after(now)) add(Calendar.DAY_OF_YEAR, 1) }
-        val request = PeriodicWorkRequestBuilder<KPlusScanWorker>(24, TimeUnit.HOURS).setInitialDelay(dailyRun.timeInMillis - now.timeInMillis, TimeUnit.MILLISECONDS).build()
+        val dailyRun = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 23); set(Calendar.MINUTE, 30); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+            if (!after(now)) add(Calendar.DAY_OF_YEAR, 1)
+        }
+        val request = PeriodicWorkRequestBuilder<KPlusScanWorker>(24, TimeUnit.HOURS)
+            .setInitialDelay(dailyRun.timeInMillis - now.timeInMillis, TimeUnit.MILLISECONDS)
+            .build()
         manager.enqueueUniquePeriodicWork(WORK, ExistingPeriodicWorkPolicy.UPDATE, request)
         manager.enqueue(OneTimeWorkRequestBuilder<KPlusScanWorker>().build())
     }
 }
 
 class KPlusScanWorker(context: Context, params: WorkerParameters) : Worker(context, params) {
+    private val kPlusReference = Regex("[0-9]{10,}(?:CPM|DQR|DTF)[0-9]+", RegexOption.IGNORE_CASE)
+
     override fun doWork(): Result {
         if (!AutoSlipScheduler.enabled(applicationContext)) return Result.success()
         val startToday = Calendar.getInstance().apply { set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0) }
@@ -73,25 +85,32 @@ class KPlusScanWorker(context: Context, params: WorkerParameters) : Worker(conte
         val before = startTomorrow.timeInMillis / 1000
         val projection = arrayOf(MediaStore.Images.Media._ID, MediaStore.Images.Media.DATE_ADDED)
         val selection = "${MediaStore.Images.Media.DATE_ADDED} >= ? AND ${MediaStore.Images.Media.DATE_ADDED} < ?"
-        val cursor = applicationContext.contentResolver.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, projection, selection, arrayOf(since.toString(), before.toString()), "${MediaStore.Images.Media.DATE_ADDED} DESC") ?: return Result.success()
+        val cursor = runCatching { applicationContext.contentResolver.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, projection, selection, arrayOf(since.toString(), before.toString()), "${MediaStore.Images.Media.DATE_ADDED} DESC") }.getOrNull() ?: return Result.success()
         val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
-        cursor.use {
-            val idColumn = it.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
-            val dateColumn = it.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_ADDED)
-            var checked = 0
-            while (it.moveToNext() && checked++ < 40) {
-                val id = it.getLong(idColumn); val mediaKey = id.toString(); val uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id); val imageDate = Date(it.getLong(dateColumn) * 1000)
-                runCatching {
-                    val text = Tasks.await(recognizer.process(InputImage.fromFilePath(applicationContext, uri))).text
-                    val isKPlus = text.contains("K+", true) || Regex("[0-9]{10,}(?:CPM|DQR)[0-9]+", RegexOption.IGNORE_CASE).containsMatchIn(text)
-                    if (isKPlus) {
-                        val draft = SlipParser.parse(text, "auto_kplus", imageDate)
-                        if (draft.amount.toDoubleOrNull()?.let { value -> value > 0 } == true) PendingSlipStore.add(applicationContext, mediaKey, draft)
+        try {
+            cursor.use {
+                val idColumn = it.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
+                val dateColumn = it.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_ADDED)
+                var scanned = 0
+                while (it.moveToNext() && scanned < 200) {
+                    val id = it.getLong(idColumn)
+                    val mediaKey = id.toString()
+                    if (PendingSlipStore.isProcessed(applicationContext, mediaKey)) continue
+                    scanned++
+                    val uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id)
+                    val imageDate = Date(it.getLong(dateColumn) * 1000)
+                    runCatching {
+                        val text = Tasks.await(recognizer.process(InputImage.fromFilePath(applicationContext, uri))).text
+                        val isKPlus = text.contains("K+", true) || kPlusReference.containsMatchIn(text)
+                        val draft = if (isKPlus) SlipParser.parse(text, "auto_kplus", imageDate) else null
+                        if (draft?.amount?.toDoubleOrNull()?.let { value -> value > 0 } == true) PendingSlipStore.add(applicationContext, mediaKey, draft)
+                        else PendingSlipStore.markProcessed(applicationContext, mediaKey)
                     }
                 }
             }
+        } finally {
+            recognizer.close()
         }
-        recognizer.close()
         return Result.success()
     }
 }

@@ -1,1 +1,3 @@
-<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="48dp" android:height="48dp" android:viewportWidth="108" android:viewportHeight="108"><path android:fillColor="#071A3D" android:pathData="M0,0h108v108h-108z"/><path android:fillColor="#20D08A" android:pathData="M49,18L65,34H57V52H41V34H33z"/><path android:fillColor="#FF6B57" android:pathData="M59,90L43,74H51V56H67V74H75z"/></vector>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@drawable/rubjai_icon" />
+</layer-list>

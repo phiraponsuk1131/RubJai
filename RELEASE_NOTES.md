@@ -1,4 +1,14 @@
-# RubJai v1.3.1
+# RubJai v1.3.2
+
+## Fixed and tuned in v1.3.2
+
+- Fixed the launcher/Recent Apps icon being squeezed by using Android adaptive mipmap resources while preserving the supplied square artwork.
+- Daily OCR now skips images already processed, recognizes K PLUS DTF references, and covers up to 200 new images from today.
+- Scanner resources close safely after errors or revoked permissions, reducing repeated work and battery use.
+
+---
+
+## Previous release: RubJai v1.3.1
 
 ## Fixed in v1.3.1
 

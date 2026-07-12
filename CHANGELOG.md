@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.2
+
+- Switched launcher and Recent Apps metadata to the adaptive `mipmap` icon instead of scaling the raw PNG as a legacy drawable.
+- Reused the supplied square RubJai artwork for adaptive and legacy launchers without changing its aspect ratio.
+- Skipped previously processed MediaStore images before OCR, recognized K PLUS `DTF` references, and raised the bounded daily coverage to 200 new images.
+- Ensured the ML Kit recognizer and MediaStore cursor close safely when scanning fails or permissions change.
+- Refactored scanner scheduling and processing branches for clearer maintenance without changing the approval requirement.
+
 ## 1.3.1
 
 - Expanded K PLUS recipient extraction to use the recipient block before the second masked account, covering personal transfers as well as known merchants.
