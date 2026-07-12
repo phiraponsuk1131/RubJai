@@ -50,7 +50,7 @@ class AuthRepository {
             ?.addOnFailureListener { done(false) } ?: done(false)
     }
 
-    fun deleteAccountAndData(done: (String?) -> Unit) {
+    fun clearUsageData(done: (String?) -> Unit) {
         val user = auth.currentUser ?: return done("ไม่พบบัญชี")
         val root = db.collection("users").document(user.uid)
         val transactionTask = root.collection("transactions").get()
@@ -63,9 +63,7 @@ class AuthRepository {
                 paymentTasks.forEach { task -> task.result.documents.forEach { batch.delete(it.reference) } }
                 debtTask.result.documents.forEach { batch.delete(it.reference) }
                 batch.delete(root)
-                batch.commit().addOnSuccessListener {
-                    user.delete().addOnSuccessListener { done(null) }.addOnFailureListener { done("ลบข้อมูลแล้ว แต่ลบบัญชีไม่สำเร็จ กรุณาเข้าสู่ระบบใหม่แล้วลองอีกครั้ง") }
-                }.addOnFailureListener { done(it.localizedMessage ?: "ลบข้อมูลไม่สำเร็จ") }
+                batch.commit().addOnSuccessListener { done(null) }.addOnFailureListener { done(it.localizedMessage ?: "ลบข้อมูลไม่สำเร็จ") }
             }.addOnFailureListener { done(it.localizedMessage ?: "อ่านข้อมูลชำระหนี้ไม่สำเร็จ") }
         }.addOnFailureListener { done(it.localizedMessage ?: "อ่านข้อมูลบัญชีไม่สำเร็จ") }
     }

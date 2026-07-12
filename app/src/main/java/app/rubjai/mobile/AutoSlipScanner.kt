@@ -42,6 +42,7 @@ object PendingSlipStore {
     }
 
     @Synchronized fun remove(context: Context, id: String) = save(context, load(context).filterNot { it.id == id })
+    @Synchronized fun clearUsage(context: Context) { prefs(context).edit().remove(PENDING).remove(PROCESSED).apply() }
     private fun save(context: Context, items: List<PendingSlip>) { prefs(context).edit().putString(PENDING, JSONArray(items.map { it.toJson() }).toString()).apply() }
     private fun PendingSlip.toJson() = JSONObject().put("id", id).put("amount", draft.amount).put("title", draft.title).put("rawText", draft.rawText.take(3000)).put("category", draft.category).put("remark", draft.remark).put("occurredAt", draft.occurredAt)
     private fun JSONObject.toPendingSlip() = PendingSlip(getString("id"), DraftTransaction(optString("amount"), optString("title"), TransactionType.EXPENSE, "auto_kplus", optString("rawText"), optString("category", "อื่น ๆ"), optString("remark"), optString("occurredAt")))

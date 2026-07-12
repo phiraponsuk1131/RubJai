@@ -12,6 +12,7 @@
 - The expense-only parser was simplified by removing unused income-detection code.
 - Daily automatic scanning now queries only images added during the current local calendar day; it no longer looks back across previous days.
 - The daily attempt is scheduled near 23:30 so it can process the current day's slips before the date changes.
+- The admin control now clears usage data without deleting the Authentication account, password, verified-email state, or admin custom claim.
 
 ---
 

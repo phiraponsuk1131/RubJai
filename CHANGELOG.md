@@ -11,6 +11,7 @@
 - Restricted daily automatic scanning to MediaStore images added between local 00:00 today and 00:00 tomorrow; removed the previous two-day lookback.
 - Scheduled the daily attempt near 23:30 so the current day has content to scan, while keeping Android's deferrable-work limitation.
 - Cleared Firebase test usage data and non-admin test accounts for a fresh onboarding test while preserving the verified admin account and its secure custom claim.
+- Changed the admin destructive control from deleting Firebase Authentication to clearing usage data only, including the local pending-slip queue, while preserving password, verification, and admin claim.
 
 ## 1.3.0
 
