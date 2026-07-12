@@ -68,9 +68,12 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
     val context = LocalContext.current
     val authRepository = remember { AuthRepository() }
     var currentUser by remember { mutableStateOf<FirebaseUser?>(authRepository.auth.currentUser) }
-    var authRefresh by remember { mutableIntStateOf(0) }
+    var verificationPassed by remember(currentUser?.uid) { mutableStateOf(currentUser?.isEmailVerified == true) }
     DisposableEffect(authRepository) {
-        val listener = FirebaseAuth.AuthStateListener { currentUser = it.currentUser }
+        val listener = FirebaseAuth.AuthStateListener {
+            currentUser = it.currentUser
+            verificationPassed = it.currentUser?.isEmailVerified == true
+        }
         authRepository.auth.addAuthStateListener(listener)
         onDispose { authRepository.auth.removeAuthStateListener(listener) }
     }
@@ -79,8 +82,8 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
         MaterialTheme(colorScheme = colors) { AuthScreen(authRepository) }
         return
     }
-    if (currentUser?.isEmailVerified != true) {
-        MaterialTheme(colorScheme = colors) { VerifyEmailScreen(authRepository, currentUser?.email.orEmpty()) { authRefresh++; currentUser = authRepository.auth.currentUser } }
+    if (!verificationPassed) {
+        MaterialTheme(colorScheme = colors) { VerifyEmailScreen(authRepository, currentUser?.email.orEmpty()) { currentUser = authRepository.auth.currentUser; verificationPassed = true } }
         return
     }
     var entries by remember { mutableStateOf(emptyList<MoneyTransaction>()) }
@@ -93,8 +96,6 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
     var updateMessage by remember { mutableStateOf<String?>(null) }
     var showProfile by remember { mutableStateOf(false) }
     var showDebts by remember { mutableStateOf(false) }
-    @Suppress("UNUSED_VARIABLE") val verificationRefresh = authRefresh
-
     LaunchedEffect(Unit) {
         repository.observe { entries = it }
         draft = sharedDraft(launchIntent)

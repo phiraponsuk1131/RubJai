@@ -1,4 +1,21 @@
-# RubJai v1.2.1
+# RubJai v1.2.2
+
+## Fixed in v1.2.2
+
+- The email-verification waiting page now checks Firebase automatically and enters RubJai as soon as the verification link has been completed.
+- Fixed the screen not updating when Firebase reused the same signed-in user object after a refresh.
+
+## Security
+
+- Regular accounts must still verify their email address before accessing app data.
+
+## Note
+
+- Return to RubJai after opening the verification link; detection may take up to about 2.5 seconds.
+
+---
+
+## Previous release: RubJai v1.2.1
 
 ## Added in v1.2.1
 

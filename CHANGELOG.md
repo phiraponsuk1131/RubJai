@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.2
+
+- Fixed automatic email-verification polling so the waiting screen closes immediately after Firebase reports a verified account.
+- Separated the verification flag from the mutable Firebase user object so Compose reliably redraws the screen.
+
 ## 2026-07-11
 
 - Created the separate RubJai Android project with package `app.rubjai.mobile`.
