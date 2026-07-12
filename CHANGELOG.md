@@ -7,6 +7,7 @@
 - Added processed-image tracking to prevent accepted or rejected K PLUS slips from returning as duplicates.
 - Scheduled approximate daily scanning with WorkManager; Android may defer execution beyond midnight for battery optimization.
 - Added a visible switch to disable automatic scanning at any time and clear permission messaging when access is denied.
+- Fixed the pending-approval dialog scope found by the first GitHub Actions compile of v1.3.0.
 
 ## 1.2.2
 

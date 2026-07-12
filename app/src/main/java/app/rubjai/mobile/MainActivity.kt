@@ -309,7 +309,19 @@ private fun SummaryCard(entries: List<MoneyTransaction>) {
 @Composable private fun PendingSlipDialog(items: List<PendingSlip>, onClose: () -> Unit, onApprove: (PendingSlip) -> Unit, onReject: (PendingSlip) -> Unit) {
     AlertDialog(onDismissRequest = onClose, title = { Text("รายการ K PLUS รออนุมัติ") }, text = {
         if (items.isEmpty()) Text("ไม่มีรายการรอตรวจ") else LazyColumn(Modifier.fillMaxWidth().heightIn(max = 460.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            items(items, key = { it.id }) { pending -> Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFF4F7FA))) { Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) { Text(pending.draft.title.ifBlank { "ไม่พบชื่อร้าน" }, fontWeight = FontWeight.Bold); Text("${pending.draft.amount} บาท", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold); Text(listOf(pending.draft.occurredAt, pending.draft.category).filter(String::isNotBlank).joinToString(" • "), style = MaterialTheme.typography.bodySmall); Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { TextButton(onClick = { onReject(pending) }) { Text("ลบออก") }; Button(onClick = { onApprove(pending) }) { Text("ยืนยันและเก็บ") } } } }
+            items(items, key = { it.id }) { pending ->
+                Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFF4F7FA))) {
+                    Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(pending.draft.title.ifBlank { "ไม่พบชื่อร้าน" }, fontWeight = FontWeight.Bold)
+                        Text("${pending.draft.amount} บาท", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Text(listOf(pending.draft.occurredAt, pending.draft.category).filter(String::isNotBlank).joinToString(" • "), style = MaterialTheme.typography.bodySmall)
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                            TextButton(onClick = { onReject(pending) }) { Text("ลบออก") }
+                            Button(onClick = { onApprove(pending) }) { Text("ยืนยันและเก็บ") }
+                        }
+                    }
+                }
+            }
         }
     }, confirmButton = { TextButton(onClick = onClose) { Text("ปิด") } })
 }
