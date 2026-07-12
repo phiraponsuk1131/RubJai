@@ -6,8 +6,10 @@ import android.provider.MediaStore
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
+import androidx.work.WorkInfo
 import androidx.work.Worker
 import androidx.work.WorkerParameters
+import androidx.work.workDataOf
 import com.google.android.gms.tasks.Tasks
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
@@ -48,7 +50,7 @@ object PendingSlipStore {
     @Synchronized fun clearUsage(context: Context) { prefs(context).edit().remove(PENDING).remove(PROCESSED).apply() }
     private fun save(context: Context, items: List<PendingSlip>) { prefs(context).edit().putString(PENDING, JSONArray(items.map { it.toJson() }).toString()).apply() }
     private fun PendingSlip.toJson() = JSONObject().put("id", id).put("amount", draft.amount).put("title", draft.title).put("rawText", draft.rawText.take(3000)).put("category", draft.category).put("remark", draft.remark).put("occurredAt", draft.occurredAt)
-    private fun JSONObject.toPendingSlip() = PendingSlip(getString("id"), DraftTransaction(optString("amount"), optString("title"), TransactionType.EXPENSE, "auto_kplus", optString("rawText"), optString("category", "อื่น ๆ"), optString("remark"), optString("occurredAt")))
+    private fun JSONObject.toPendingSlip() = PendingSlip(getString("id"), DraftTransaction(optString("amount"), optString("title"), TransactionType.EXPENSE, "auto_kplus", optString("rawText"), optString("category", "ใช้จ่ายทั่วไป"), optString("remark"), optString("occurredAt")))
 }
 
 object KPlusSyncManager {
@@ -56,7 +58,12 @@ object KPlusSyncManager {
     private const val PREFS = "auto_kplus_scan"
     fun hasConsent(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean("consent", false)
     fun setConsent(context: Context, consent: Boolean) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean("consent", consent).apply()
-    fun syncNow(context: Context) = WorkManager.getInstance(context).enqueueUniqueWork(WORK, ExistingWorkPolicy.REPLACE, OneTimeWorkRequestBuilder<KPlusScanWorker>().build())
+    fun syncNow(context: Context): UUID {
+        val request = OneTimeWorkRequestBuilder<KPlusScanWorker>().build()
+        WorkManager.getInstance(context).enqueueUniqueWork(WORK, ExistingWorkPolicy.REPLACE, request)
+        return request.id
+    }
+    fun workInfo(context: Context, id: UUID): WorkInfo? = WorkManager.getInstance(context).getWorkInfoById(id).get()
     fun revoke(context: Context) { setConsent(context, false); WorkManager.getInstance(context).cancelUniqueWork(WORK) }
 }
 
@@ -73,6 +80,7 @@ class KPlusScanWorker(context: Context, params: WorkerParameters) : Worker(conte
         val selection = "${MediaStore.Images.Media.DATE_ADDED} >= ? AND ${MediaStore.Images.Media.DATE_ADDED} < ?"
         val cursor = runCatching { applicationContext.contentResolver.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, projection, selection, arrayOf(since.toString(), before.toString()), "${MediaStore.Images.Media.DATE_ADDED} DESC") }.getOrNull() ?: return Result.success()
         val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+        var found = 0
         try {
             cursor.use {
                 val idColumn = it.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
@@ -83,13 +91,14 @@ class KPlusScanWorker(context: Context, params: WorkerParameters) : Worker(conte
                     val mediaKey = id.toString()
                     if (PendingSlipStore.isProcessed(applicationContext, mediaKey)) continue
                     scanned++
+                    setProgressAsync(workDataOf("scanned" to scanned))
                     val uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id)
                     val imageDate = Date(it.getLong(dateColumn) * 1000)
                     runCatching {
                         val text = Tasks.await(recognizer.process(InputImage.fromFilePath(applicationContext, uri))).text
                         val isKPlus = text.contains("K+", true) || kPlusReference.containsMatchIn(text)
                         val draft = if (isKPlus) SlipParser.parse(text, "auto_kplus", imageDate) else null
-                        if (draft?.amount?.toDoubleOrNull()?.let { value -> value > 0 } == true) PendingSlipStore.add(applicationContext, mediaKey, draft)
+                        if (draft?.amount?.toDoubleOrNull()?.let { value -> value > 0 } == true) { PendingSlipStore.add(applicationContext, mediaKey, draft); found++ }
                         else PendingSlipStore.markProcessed(applicationContext, mediaKey)
                     }
                 }
@@ -97,6 +106,6 @@ class KPlusScanWorker(context: Context, params: WorkerParameters) : Worker(conte
         } finally {
             recognizer.close()
         }
-        return Result.success()
+        return Result.success(workDataOf("found" to found))
     }
 }

@@ -55,6 +55,9 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.util.UUID
 
 class MainActivity : ComponentActivity() {
     private val repository = TransactionRepository()
@@ -70,7 +73,7 @@ data class DraftTransaction(
     val type: TransactionType = TransactionType.EXPENSE,
     val source: String = "manual",
     val rawText: String = "",
-    val category: String = "อื่น ๆ",
+    val category: String = "ใช้จ่ายทั่วไป",
     val remark: String = "",
     val occurredAt: String = "",
 )
@@ -116,6 +119,9 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
     var entryKind by remember { mutableStateOf(EntryKind.ALL) }
     var syncConsent by remember { mutableStateOf(KPlusSyncManager.hasConsent(context)) }
     var showSyncConsent by remember { mutableStateOf(false) }
+    var syncWorkId by remember { mutableStateOf<UUID?>(null) }
+    var syncing by remember { mutableStateOf(false) }
+    var syncScanned by remember { mutableIntStateOf(0) }
     var pendingSlips by remember { mutableStateOf(PendingSlipStore.load(context)) }
     var showPending by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
@@ -123,6 +129,19 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
         draft = sharedDraft(launchIntent)
         val version = context.packageManager.getPackageInfo(context.packageName, 0).versionName.orEmpty()
         updateManager.checkForUpdate(version) { availableUpdate = it }
+    }
+    LaunchedEffect(syncWorkId) {
+        val workId = syncWorkId ?: return@LaunchedEffect
+        while (true) {
+            val info = withContext(Dispatchers.IO) { runCatching { KPlusSyncManager.workInfo(context, workId) }.getOrNull() }
+            when (info?.state) {
+                androidx.work.WorkInfo.State.RUNNING -> { syncing = true; syncScanned = info.progress.getInt("scanned", 0) }
+                androidx.work.WorkInfo.State.SUCCEEDED -> { syncing = false; pendingSlips = PendingSlipStore.load(context); val found = info.outputData.getInt("found", 0); message = if (found > 0) "ซิงเสร็จ พบ $found รายการ กรุณาตรวจและอนุมัติ" else "ซิงเสร็จ ไม่พบสลิป K PLUS ใหม่ของวันนี้"; syncWorkId = null; break }
+                androidx.work.WorkInfo.State.FAILED, androidx.work.WorkInfo.State.CANCELLED -> { syncing = false; message = "ซิงไม่สำเร็จ กรุณาตรวจสิทธิ์รูปภาพแล้วลองใหม่"; syncWorkId = null; break }
+                else -> syncing = true
+            }
+            delay(500)
+        }
     }
 
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
@@ -139,8 +158,9 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
         }
     }
     val scanPermission = if (android.os.Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_IMAGES else Manifest.permission.READ_EXTERNAL_STORAGE
+    val startKPlusSync = { syncing = true; syncScanned = 0; syncWorkId = KPlusSyncManager.syncNow(context) }
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) { KPlusSyncManager.syncNow(context); message = "เริ่มซิงสลิป K PLUS ของวันนี้แล้ว" }
+        if (granted) startKPlusSync()
         else message = "ต้องอนุญาตการเข้าถึงรูปจึงจะซิงสลิป K PLUS วันนี้ได้"
     }
 
@@ -157,7 +177,7 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
                         Icon(Icons.Default.ImageSearch, null); Spacer(Modifier.width(8.dp)); Text(if (busy) "กำลังอ่านสลิป…" else "เลือกสลิปจากเครื่อง")
                     }
                 }
-                item { KPlusSyncCard(syncConsent, pendingSlips.size, onSync = { if (!syncConsent) showSyncConsent = true else if (ContextCompat.checkSelfPermission(context, scanPermission) == PackageManager.PERMISSION_GRANTED) { KPlusSyncManager.syncNow(context); message = "เริ่มซิงสลิป K PLUS ของวันนี้แล้ว" } else permissionLauncher.launch(scanPermission) }, onRevoke = { KPlusSyncManager.revoke(context); syncConsent = false }, onReview = { pendingSlips = PendingSlipStore.load(context); showPending = true }) }
+                item { KPlusSyncCard(syncConsent, pendingSlips.size, syncing, syncScanned, onSync = { if (!syncConsent) showSyncConsent = true else if (ContextCompat.checkSelfPermission(context, scanPermission) == PackageManager.PERMISSION_GRANTED) startKPlusSync() else permissionLauncher.launch(scanPermission) }, onRevoke = { KPlusSyncManager.revoke(context); syncConsent = false }, onReview = { pendingSlips = PendingSlipStore.load(context); showPending = true }) }
                 item { QuickOverview(entries) }
                 item { OutlinedButton(onClick = { showDebts = true }, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.CreditCard, null); Spacer(Modifier.width(8.dp)); Text("แผนปลดหนี้") } }
                 item { Text("รายการของคุณ", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold); EntryFilters(entryPeriod, entryKind, { entryPeriod = it }, { entryKind = it }) }
@@ -168,7 +188,7 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
         }
         draft?.let { current -> TransactionDialog(current, onDismiss = { draft = null }, onSave = { busy = true; repository.add(it, onDone = { error -> busy = false; message = error ?: "บันทึกแล้ว" }); draft = null }) }
         message?.let { AlertDialog(onDismissRequest = { message = null }, confirmButton = { TextButton(onClick = { message = null }) { Text("ตกลง") } }, text = { Text(it) }) }
-        if (showSyncConsent) AlertDialog(onDismissRequest = { showSyncConsent = false }, title = { Text("ยินยอมซิงสลิป K PLUS?") }, text = { Text("RubJai จะอ่านเฉพาะรูปที่เพิ่มในวันนี้ด้วย OCR บนเครื่อง ผลจะอยู่ในคิวรออนุมัติและยังไม่บันทึกจนกว่าคุณจะยืนยัน") }, confirmButton = { Button(onClick = { KPlusSyncManager.setConsent(context, true); syncConsent = true; showSyncConsent = false; if (ContextCompat.checkSelfPermission(context, scanPermission) == PackageManager.PERMISSION_GRANTED) { KPlusSyncManager.syncNow(context); message = "เริ่มซิงสลิป K PLUS ของวันนี้แล้ว" } else permissionLauncher.launch(scanPermission) }) { Text("ยินยอมและซิง") } }, dismissButton = { TextButton(onClick = { showSyncConsent = false }) { Text("ยังไม่ยินยอม") } })
+        if (showSyncConsent) AlertDialog(onDismissRequest = { showSyncConsent = false }, title = { Text("ยินยอมซิงสลิป K PLUS?") }, text = { Text("RubJai จะอ่านเฉพาะรูปที่เพิ่มในวันนี้ด้วย OCR บนเครื่อง ผลจะอยู่ในคิวรออนุมัติและยังไม่บันทึกจนกว่าคุณจะยืนยัน") }, confirmButton = { Button(onClick = { KPlusSyncManager.setConsent(context, true); syncConsent = true; showSyncConsent = false; if (ContextCompat.checkSelfPermission(context, scanPermission) == PackageManager.PERMISSION_GRANTED) startKPlusSync() else permissionLauncher.launch(scanPermission) }) { Text("ยินยอมและซิง") } }, dismissButton = { TextButton(onClick = { showSyncConsent = false }) { Text("ยังไม่ยินยอม") } })
         if (showPending) PendingSlipDialog(pendingSlips, onClose = { showPending = false }, onApprove = { pending -> repository.add(pending.draft) { error -> if (error == null) { PendingSlipStore.remove(context, pending.id); pendingSlips = PendingSlipStore.load(context); message = "บันทึกรายจ่ายแล้ว" } else message = error } }, onReject = { pending -> PendingSlipStore.remove(context, pending.id); pendingSlips = PendingSlipStore.load(context); if (pendingSlips.isEmpty()) showPending = false })
         availableUpdate?.let { update ->
             AlertDialog(
@@ -302,12 +322,13 @@ private fun SummaryCard(entries: List<MoneyTransaction>) {
     }
 }
 
-@Composable private fun KPlusSyncCard(consented: Boolean, pendingCount: Int, onSync: () -> Unit, onRevoke: () -> Unit, onReview: () -> Unit) {
+@Composable private fun KPlusSyncCard(consented: Boolean, pendingCount: Int, syncing: Boolean, scanned: Int, onSync: () -> Unit, onRevoke: () -> Unit, onReview: () -> Unit) {
     Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F7F2))) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("ซิงสลิป K PLUS วันนี้", fontWeight = FontWeight.Bold)
             Text("กดเมื่อต้องการตรวจรูปของวันนี้ ผลจะรอคุณอนุมัติ", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-            Button(onClick = onSync, modifier = Modifier.fillMaxWidth().semantics { contentDescription = "ซิงสลิป K PLUS ของวันนี้ทันที" }) { Text("ซิงวันนี้") }
+            Button(onClick = onSync, enabled = !syncing, modifier = Modifier.fillMaxWidth().semantics { contentDescription = "ซิงสลิป K PLUS ของวันนี้ทันที" }) { Text(if (syncing) "กำลังซิง…" else "ซิงวันนี้") }
+            if (syncing) { LinearProgressIndicator(Modifier.fillMaxWidth()); Text(if (scanned > 0) "ตรวจแล้ว $scanned รูป" else "กำลังเตรียมตรวจรูป…", style = MaterialTheme.typography.bodySmall, color = Color.Gray) }
             if (pendingCount > 0) Button(onClick = onReview, modifier = Modifier.fillMaxWidth()) { Text("ตรวจรายการรออนุมัติ $pendingCount รายการ") }
             if (consented) TextButton(onClick = onRevoke, modifier = Modifier.align(Alignment.End)) { Text("ยกเลิกความยินยอม") }
         }
@@ -353,7 +374,7 @@ private fun List<MoneyTransaction>.filterFor(period: EntryPeriod, kind: EntryKin
 }
 
 @Composable private fun SpendingOverview(entries: List<MoneyTransaction>, period: EntryPeriod) {
-    val groups = entries.groupBy { it.category.ifBlank { "อื่น ๆ" } }.mapValues { it.value.sumOf(MoneyTransaction::amount) }.entries.sortedByDescending { it.value }
+    val groups = entries.groupBy { it.category.ifBlank { "ใช้จ่ายทั่วไป" } }.mapValues { it.value.sumOf(MoneyTransaction::amount) }.entries.sortedByDescending { it.value }
     val total = groups.sumOf { it.value }
     val colors = listOf(Color(0xFF0B9B73), Color(0xFFFF8A65), Color(0xFF5C6BC0), Color(0xFFFFC107), Color(0xFF26A69A), Color(0xFFAB47BC))
     val description = if (total > 0) "ภาพรวมรายจ่าย${period.label} รวม ${money(total)} จำนวน ${groups.size} หมวด" else "ยังไม่มีรายจ่าย${period.label}"

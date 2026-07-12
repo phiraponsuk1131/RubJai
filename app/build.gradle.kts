@@ -12,8 +12,8 @@ android {
         applicationId = "app.rubjai.mobile"
         minSdk = 23
         targetSdk = 36
-        versionCode = 9
-        versionName = "1.3.2"
+        versionCode = 10
+        versionName = "1.3.3"
     }
 
     val releaseStoreFile = System.getenv("SIGNING_STORE_FILE")

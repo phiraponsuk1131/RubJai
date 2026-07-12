@@ -14,7 +14,7 @@ data class MoneyTransaction(
     val type: String = "EXPENSE",
     val source: String = "manual",
     val rawText: String = "",
-    val category: String = "อื่น ๆ",
+    val category: String = "ใช้จ่ายทั่วไป",
     val remark: String = "",
     val occurredAt: String = "",
     @ServerTimestamp val createdAt: Date? = null,

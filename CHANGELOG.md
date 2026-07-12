@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.3.3
+
+- Replaced unreliable OCR recipient/merchant titles with the resulting expense category in confirmation and saved transaction rows.
+- Expanded K PLUS classification for food, travel, accommodation, transport, fuel, shopping, household items, bills, and health.
+- Changed the unknown fallback from `อื่น ๆ` to `ใช้จ่ายทั่วไป`.
+- Fixed metadata-assisted date repair to retain the slip's Buddhist year (for example `69`) instead of substituting Gregorian `26`.
+- Restored direct use of the supplied original launcher PNG as requested.
+- Added live sync status, an indeterminate loading bar, scanned-image count, automatic pending-queue refresh, and explicit completion/failure messages.
+
 ## 1.3.2
 
 - Switched launcher and Recent Apps metadata to the adaptive `mipmap` icon instead of scaling the raw PNG as a legacy drawable.

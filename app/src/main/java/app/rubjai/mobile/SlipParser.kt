@@ -3,9 +3,9 @@ package app.rubjai.mobile
 import java.util.Locale
 import java.util.Date
 import java.util.Calendar
-import java.text.SimpleDateFormat
 
 object SlipParser {
+    private val thaiMonths = arrayOf("ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค.")
     private val amountPatterns = listOf(
         Regex("(?:จำนวน|ยอด|amount|เงินเข้า|รับเงิน|โอนเงิน)[^0-9]{0,20}([0-9,]+(?:\\.[0-9]{1,2})?)", RegexOption.IGNORE_CASE),
         Regex("([0-9,]+(?:\\.[0-9]{2}))\\s*(?:บาท|THB)", RegexOption.IGNORE_CASE),
@@ -32,7 +32,7 @@ object SlipParser {
         val rawDate = datePattern.find(text)?.value ?: thaiSlipDatePattern.find(text)?.groupValues?.getOrNull(1)?.replace(Regex("\\s+"), " ")?.trim().orEmpty()
         val date = normalizeDate(rawDate, imageDate)
         val time = timePattern.find(text)?.value.orEmpty()
-        return DraftTransaction(amount, merchant, TransactionType.EXPENSE, source, text, category, remark, listOf(date, time).filter(String::isNotBlank).joinToString(" "))
+        return DraftTransaction(amount, category, TransactionType.EXPENSE, source, text, category, remark, listOf(date, time).filter(String::isNotBlank).joinToString(" "))
     }
 
     private fun findKPlusRecipient(lines: List<String>): String? {
@@ -47,23 +47,30 @@ object SlipParser {
     }
 
     private fun normalizeDate(raw: String, imageDate: Date?): String {
-        if (raw.isBlank()) return imageDate?.let { SimpleDateFormat("d MMM yy", Locale("th", "TH")).format(it) }.orEmpty()
+        if (raw.isBlank()) return imageDate?.let(::thaiImageDate).orEmpty()
         if (datePattern.matches(raw) || raw.any { it in 'ก'..'๙' }) return raw
         val fallback = imageDate ?: return raw
         val day = Regex("^[0-3]?[0-9]").find(raw)?.value?.toIntOrNull() ?: return raw
-        val calendar = Calendar.getInstance().apply { time = fallback; set(Calendar.DAY_OF_MONTH, day.coerceIn(1, getActualMaximum(Calendar.DAY_OF_MONTH))) }
-        return SimpleDateFormat("d MMM yy", Locale("th", "TH")).format(calendar.time)
+        val year = Regex("(?:[0-9]{2}|[0-9]{4})$").find(raw)?.value ?: return raw
+        val month = thaiMonths[Calendar.getInstance().apply { time = fallback }.get(Calendar.MONTH)]
+        return "$day $month $year"
+    }
+
+    private fun thaiImageDate(date: Date): String {
+        val calendar = Calendar.getInstance().apply { time = date }
+        val buddhistYear = (calendar.get(Calendar.YEAR) + 543) % 100
+        return "${calendar.get(Calendar.DAY_OF_MONTH)} ${thaiMonths[calendar.get(Calendar.MONTH)]} ${buddhistYear.toString().padStart(2, '0')}"
     }
 
     private fun categorize(value: String): String {
         return when {
-            listOf("restaurant", "food", "cafe", "coffee", "minor dq", "dairy queen", "อาหาร", "ข้าว", "กาแฟ").any { value.contains(it, true) } -> "อาหารและเครื่องดื่ม"
-            listOf("grab", "bolt", "taxi", "bts", "mrt", "fuel", "gas", "เดินทาง", "น้ำมัน").any { value.contains(it, true) } -> "เดินทาง"
-            listOf("mr.d.i.y", "shop", "store", "mall", "ของใช้", "ซื้อของ").any { value.contains(it, true) } -> "ของใช้/ช้อปปิ้ง"
+            listOf("restaurant", "food", "chester", "cafe", "coffee", "minor dq", "dairy queen", "kfc", "mcdonald", "อาหาร", "ข้าว", "กาแฟ", "ชา", "เบเกอรี่").any { value.contains(it, true) } -> "อาหารและเครื่องดื่ม"
+            listOf("agoda", "booking", "hotel", "resort", "airasia", "airways", "flight", "trip", "travel", "grab", "bolt", "taxi", "bts", "mrt", "fuel", "gas", "เดินทาง", "ท่องเที่ยว", "โรงแรม", "น้ำมัน").any { value.contains(it, true) } -> "ท่องเที่ยวและเดินทาง"
+            listOf("mr.d.i.y", "shop", "store", "mall", "market", "ของใช้", "ซื้อของ", "ช้อป").any { value.contains(it, true) } -> "ของใช้และจิปาถะ"
             listOf("bill", "muni", "electric", "water", "internet", "ค่าไฟ", "ค่าน้ำ", "บิล").any { value.contains(it, true) } -> "บิล/สาธารณูปโภค"
             listOf("hospital", "clinic", "pharmacy", "health", "ยา", "โรงพยาบาล").any { value.contains(it, true) } -> "สุขภาพ"
             listOf("transfer", "โอนเงิน").any { value.contains(it, true) } -> "โอนเงิน"
-            else -> "อื่น ๆ"
+            else -> "ใช้จ่ายทั่วไป"
         }
     }
 }
