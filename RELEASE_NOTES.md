@@ -1,4 +1,21 @@
-# RubJai v1.3.0
+# RubJai v1.3.1
+
+## Fixed in v1.3.1
+
+- K PLUS personal transfers now read the recipient block after the transfer arrow instead of returning no merchant name.
+- Garbled Thai month text such as `n.A.` is restored using the image date, producing a complete Thai slip date while preserving the slip time.
+- Profile updates no longer send an unnecessary email field and stay within Firestore field limits.
+
+## Improved
+
+- Date recovery now applies to manually selected slips, debt payment slips, and daily automatic K PLUS scans.
+- The expense-only parser was simplified by removing unused income-detection code.
+- Daily automatic scanning now queries only images added during the current local calendar day; it no longer looks back across previous days.
+- The daily attempt is scheduled near 23:30 so it can process the current day's slips before the date changes.
+
+---
+
+## Previous release: RubJai v1.3.0
 
 ## Added in v1.3.0
 

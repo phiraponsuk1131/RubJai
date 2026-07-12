@@ -2,9 +2,11 @@ package app.rubjai.mobile
 
 import android.Manifest
 import android.content.Intent
+import android.content.Context
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
+import android.provider.MediaStore
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -50,6 +52,7 @@ import com.google.firebase.auth.FirebaseUser
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.Calendar
+import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.delay
 
@@ -127,7 +130,7 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
             val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
             recognizer.process(InputImage.fromFilePath(context, uri))
                 .addOnSuccessListener { result ->
-                    val parsed = SlipParser.parse(result.text, "slip_ocr")
+                    val parsed = SlipParser.parse(result.text, "slip_ocr", imageDate(context, uri))
                     if (parsed.amount.toDoubleOrNull()?.let { it > 0 } == true) draft = parsed else message = "อ่านยอดจากรูปไม่พบ กรุณาเลือกภาพสลิปที่ชัดเจน"
                     busy = false
                 }
@@ -196,7 +199,7 @@ private fun DebtPlannerScreen(onClose: () -> Unit) {
     val context = LocalContext.current; val repository = remember { DebtRepository() }
     var debts by remember { mutableStateOf(emptyList<Debt>()) }; var create by remember { mutableStateOf(false) }; var selected by remember { mutableStateOf<Debt?>(null) }; var target by remember { mutableStateOf<Debt?>(null) }; var draft by remember { mutableStateOf<DraftTransaction?>(null) }; var message by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) { repository.observe { updated -> debts = updated; selected = selected?.let { current -> updated.firstOrNull { it.id == current.id } } } }
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? -> if (uri != null) TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS).process(InputImage.fromFilePath(context, uri)).addOnSuccessListener { result -> val parsed = SlipParser.parse(result.text, "debt_slip"); if (parsed.amount.toDoubleOrNull()?.let { it > 0 } == true) draft = parsed else message = "อ่านยอดจากสลิปไม่พบ กรุณาเลือกสลิปที่ชัดเจน" }.addOnFailureListener { message = "อ่านสลิปไม่สำเร็จ" } }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? -> if (uri != null) TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS).process(InputImage.fromFilePath(context, uri)).addOnSuccessListener { result -> val parsed = SlipParser.parse(result.text, "debt_slip", imageDate(context, uri)); if (parsed.amount.toDoubleOrNull()?.let { it > 0 } == true) draft = parsed else message = "อ่านยอดจากสลิปไม่พบ กรุณาเลือกสลิปที่ชัดเจน" }.addOnFailureListener { message = "อ่านสลิปไม่สำเร็จ" } }
     Column(Modifier.fillMaxSize()) {
         Surface(color = Color(0xFF071A3D)) { Row(Modifier.fillMaxWidth().statusBarsPadding().padding(10.dp), verticalAlignment = Alignment.CenterVertically) { IconButton(onClick = { if (selected != null) selected = null else onClose() }) { Icon(Icons.Default.ArrowBack, "กลับ", tint = Color.White) }; Text(selected?.name ?: "รายการหนี้", color = Color.White, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold); Spacer(Modifier.weight(1f)); if (selected == null) IconButton(onClick = { create = true }) { Icon(Icons.Default.Add, "เพิ่มหนี้", tint = Color.White) } } }
         LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
@@ -399,5 +402,14 @@ private fun sharedDraft(intent: Intent): DraftTransaction? {
     val text = intent.getStringExtra(Intent.EXTRA_TEXT) ?: return null
     return SlipParser.parse(text, "line_share")
 }
+
+private fun imageDate(context: Context, uri: Uri): Date? = runCatching {
+    context.contentResolver.query(uri, arrayOf(MediaStore.Images.Media.DATE_TAKEN, MediaStore.Images.Media.DATE_ADDED), null, null, null)?.use { cursor ->
+        if (!cursor.moveToFirst()) return@use null
+        val taken = cursor.getColumnIndex(MediaStore.Images.Media.DATE_TAKEN).takeIf { it >= 0 }?.let(cursor::getLong) ?: 0L
+        val added = cursor.getColumnIndex(MediaStore.Images.Media.DATE_ADDED).takeIf { it >= 0 }?.let(cursor::getLong)?.times(1000) ?: 0L
+        maxOf(taken, added).takeIf { it > 0 }?.let(::Date)
+    }
+}.getOrNull()
 
 private fun money(value: Double) = NumberFormat.getCurrencyInstance(Locale("th", "TH")).format(value)

@@ -33,7 +33,7 @@ class AuthRepository {
     fun updateProfile(name: String, phone: String, done: (String?) -> Unit) {
         val user = auth.currentUser ?: return done("ยังไม่ได้เข้าสู่ระบบ")
         user.updateProfile(UserProfileChangeRequest.Builder().setDisplayName(name.trim()).build()).addOnSuccessListener {
-            db.collection("users").document(user.uid).set(mapOf("displayName" to name.trim(), "phone" to phone.trim(), "email" to (user.email ?: "")), com.google.firebase.firestore.SetOptions.merge())
+            db.collection("users").document(user.uid).set(mapOf("displayName" to name.trim().take(100), "phone" to phone.trim().take(30)))
                 .addOnSuccessListener { done(null) }.addOnFailureListener { done(it.localizedMessage) }
         }.addOnFailureListener { done(it.localizedMessage) }
     }

@@ -1,17 +1,17 @@
 # RubJai
 
-RubJai is an Android income, expense, and debt-payoff tracker built with Kotlin and Jetpack Compose. Package: `app.rubjai.mobile`; minSdk 23; targetSdk 36; version 1.3.0.
+RubJai is an Android income, expense, and debt-payoff tracker built with Kotlin and Jetpack Compose. Package: `app.rubjai.mobile`; minSdk 23; targetSdk 36; version 1.3.1.
 
 ## Features
 
 - Add income or salary directly as a number; income does not require a slip.
-- Expenses come from a user-selected slip. RubJai automatically maps the merchant name, positive decimal amount, time, category, and remark; no amount input is shown for scanned expenses.
+- Expenses come from a user-selected slip. RubJai automatically maps the K PLUS recipient or merchant, positive decimal amount, full date/time, category, and remark; no amount input is shown for scanned expenses.
 - Non-slip images or images with no readable positive amount are rejected instead of opening an empty amount form.
 - Receive text or slip images through Android Share, including content explicitly shared from LINE.
 - Register or sign in with email/password, confirm Firebase's email verification link, and edit display name and phone in a scroll-safe profile dialog.
 - Show income, expenses, and current balance; sync transactions to each signed-in user's Firestore path.
 - Always show extracted data for confirmation before saving.
-- Optional daily K PLUS-only gallery scanning. New results stay in a local approval queue until the user confirms and uploads the transaction or rejects it.
+- Optional daily K PLUS-only gallery scanning checks images added during the current calendar day only. New results stay in a local approval queue until the user confirms and uploads the transaction or rejects it.
 - Check the public RubJai GitHub Release at startup and offer an in-app APK download with progress.
 - Filter the scrollable transaction history by today, week, month, or all records and by income or expense.
 - Create debts, apply a monthly payment from a selected slip, reject duplicate slips, show payment history with date/time, estimate payoff months from the latest payment and annual interest, and show progress encouragement.

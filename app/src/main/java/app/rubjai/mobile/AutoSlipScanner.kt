@@ -16,6 +16,7 @@ import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Calendar
+import java.util.Date
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
@@ -54,8 +55,9 @@ object AutoSlipScheduler {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean("enabled", enabled).apply()
         val manager = WorkManager.getInstance(context)
         if (!enabled) { manager.cancelUniqueWork(WORK); return }
-        val now = Calendar.getInstance(); val midnight = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, 1); set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0) }
-        val request = PeriodicWorkRequestBuilder<KPlusScanWorker>(24, TimeUnit.HOURS).setInitialDelay(midnight.timeInMillis - now.timeInMillis, TimeUnit.MILLISECONDS).build()
+        val now = Calendar.getInstance()
+        val dailyRun = Calendar.getInstance().apply { set(Calendar.HOUR_OF_DAY, 23); set(Calendar.MINUTE, 30); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0); if (!after(now)) add(Calendar.DAY_OF_YEAR, 1) }
+        val request = PeriodicWorkRequestBuilder<KPlusScanWorker>(24, TimeUnit.HOURS).setInitialDelay(dailyRun.timeInMillis - now.timeInMillis, TimeUnit.MILLISECONDS).build()
         manager.enqueueUniquePeriodicWork(WORK, ExistingPeriodicWorkPolicy.UPDATE, request)
         manager.enqueue(OneTimeWorkRequestBuilder<KPlusScanWorker>().build())
     }
@@ -64,20 +66,25 @@ object AutoSlipScheduler {
 class KPlusScanWorker(context: Context, params: WorkerParameters) : Worker(context, params) {
     override fun doWork(): Result {
         if (!AutoSlipScheduler.enabled(applicationContext)) return Result.success()
-        val since = System.currentTimeMillis() / 1000 - TimeUnit.DAYS.toSeconds(2)
+        val startToday = Calendar.getInstance().apply { set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0) }
+        val startTomorrow = (startToday.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, 1) }
+        val since = startToday.timeInMillis / 1000
+        val before = startTomorrow.timeInMillis / 1000
         val projection = arrayOf(MediaStore.Images.Media._ID, MediaStore.Images.Media.DATE_ADDED)
-        val cursor = applicationContext.contentResolver.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, projection, "${MediaStore.Images.Media.DATE_ADDED} >= ?", arrayOf(since.toString()), "${MediaStore.Images.Media.DATE_ADDED} DESC") ?: return Result.success()
+        val selection = "${MediaStore.Images.Media.DATE_ADDED} >= ? AND ${MediaStore.Images.Media.DATE_ADDED} < ?"
+        val cursor = applicationContext.contentResolver.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, projection, selection, arrayOf(since.toString(), before.toString()), "${MediaStore.Images.Media.DATE_ADDED} DESC") ?: return Result.success()
         val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
         cursor.use {
             val idColumn = it.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
+            val dateColumn = it.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_ADDED)
             var checked = 0
             while (it.moveToNext() && checked++ < 40) {
-                val id = it.getLong(idColumn); val mediaKey = id.toString(); val uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id)
+                val id = it.getLong(idColumn); val mediaKey = id.toString(); val uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id); val imageDate = Date(it.getLong(dateColumn) * 1000)
                 runCatching {
                     val text = Tasks.await(recognizer.process(InputImage.fromFilePath(applicationContext, uri))).text
                     val isKPlus = text.contains("K+", true) || Regex("[0-9]{10,}(?:CPM|DQR)[0-9]+", RegexOption.IGNORE_CASE).containsMatchIn(text)
                     if (isKPlus) {
-                        val draft = SlipParser.parse(text, "auto_kplus")
+                        val draft = SlipParser.parse(text, "auto_kplus", imageDate)
                         if (draft.amount.toDoubleOrNull()?.let { value -> value > 0 } == true) PendingSlipStore.add(applicationContext, mediaKey, draft)
                     }
                 }

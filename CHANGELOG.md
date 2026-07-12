@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.3.1
+
+- Expanded K PLUS recipient extraction to use the recipient block before the second masked account, covering personal transfers as well as known merchants.
+- Added a safe account-ending fallback when Thai recipient text cannot be recognized instead of displaying an unrelated sender or an empty merchant.
+- Normalized garbled Thai month OCR with the image timestamp while retaining the transaction day and time from the slip.
+- Passed image metadata into manual, debt, and daily K PLUS scanning for complete date recovery.
+- Fixed profile writes rejected by stricter deployed Firestore rules by storing only bounded `displayName` and `phone` fields.
+- Removed unused income-detection branches from the expense-only slip parser.
+- Restricted daily automatic scanning to MediaStore images added between local 00:00 today and 00:00 tomorrow; removed the previous two-day lookback.
+- Scheduled the daily attempt near 23:30 so the current day has content to scan, while keeping Android's deferrable-work limitation.
+- Cleared Firebase test usage data and non-admin test accounts for a fresh onboarding test while preserving the verified admin account and its secure custom claim.
+
 ## 1.3.0
 
 - Added explicit opt-in daily scanning of recent gallery images for K PLUS slips only.
