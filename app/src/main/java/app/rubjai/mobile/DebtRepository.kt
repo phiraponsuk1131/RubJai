@@ -35,11 +35,22 @@ data class Debt(
     }
 }
 
+data class DebtPayment(
+    val amount: Double = 0.0,
+    val merchant: String = "",
+    val occurredAt: String = "",
+    val remark: String = "",
+    val paidAt: Date? = null,
+)
+
 class DebtRepository {
     private val db = FirebaseFirestore.getInstance()
     private val auth = FirebaseAuth.getInstance()
     private fun debts() = db.collection("users").document(auth.currentUser!!.uid).collection("debts")
     fun observe(change: (List<Debt>) -> Unit) = debts().orderBy("createdAt", Query.Direction.DESCENDING).addSnapshotListener { snap, _ -> change(snap?.toObjects(Debt::class.java).orEmpty()) }
+    fun observePayments(debtId: String, change: (List<DebtPayment>) -> Unit) = debts().document(debtId).collection("payments")
+        .orderBy("paidAt", Query.Direction.DESCENDING)
+        .addSnapshotListener { snap, _ -> change(snap?.toObjects(DebtPayment::class.java).orEmpty()) }
     fun add(name: String, balance: Double, interest: Double, done: (String?) -> Unit) {
         val id = UUID.randomUUID().toString(); val debt = Debt(id, name.trim(), balance, balance, interest)
         debts().document(id).set(debt).addOnSuccessListener { done(null) }.addOnFailureListener { done(it.localizedMessage) }
@@ -51,7 +62,7 @@ class DebtRepository {
         db.runTransaction { tx ->
             if (tx.get(paymentRef).exists()) error("DUPLICATE")
             val latest = tx.get(debtRef).toObject(Debt::class.java) ?: error("NOT_FOUND")
-            tx.set(paymentRef, mapOf("amount" to amount, "remark" to draft.remark, "reference" to fingerprint, "paidAt" to Date(), "rawText" to draft.rawText.take(3000)))
+            tx.set(paymentRef, mapOf("amount" to amount, "merchant" to draft.title, "occurredAt" to draft.occurredAt, "remark" to draft.remark, "reference" to fingerprint, "paidAt" to Date(), "rawText" to draft.rawText.take(3000)))
             tx.update(debtRef, mapOf("remainingBalance" to (latest.remainingBalance - amount).coerceAtLeast(0.0), "latestPayment" to amount, "paymentsMade" to latest.paymentsMade + 1))
         }.addOnSuccessListener { done(null) }.addOnFailureListener { done(if (it.message == "DUPLICATE") "สลิปนี้ถูกใช้ตัดยอดแล้ว" else it.localizedMessage) }
     }

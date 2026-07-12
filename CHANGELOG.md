@@ -4,6 +4,11 @@
 
 - Fixed automatic email-verification polling so the waiting screen closes immediately after Firebase reports a verified account.
 - Separated the verification flag from the mutable Firebase user object so Compose reliably redraws the screen.
+- Added scroll-safe transaction history filters for today, week, month, all records, income, and expenses.
+- Added debt payment history with merchant, amount, and slip date/time, falling back to the stored payment timestamp.
+- Refined transaction, empty-state, and debt cards for a cleaner, more readable UI.
+- Fixed K PLUS MR.D.I.Y. merchant extraction by prioritizing the recipient's structured brand code and rejecting label-like fallback lines.
+- Added K PLUS Thai textual date extraction (for example `11 ก.ค. 69`) from the same line as the transaction time.
 
 ## 2026-07-11
 

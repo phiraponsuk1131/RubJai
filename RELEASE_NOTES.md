@@ -4,6 +4,15 @@
 
 - The email-verification waiting page now checks Firebase automatically and enters RubJai as soon as the verification link has been completed.
 - Fixed the screen not updating when Firebase reused the same signed-in user object after a refresh.
+- Fixed MR.D.I.Y. K PLUS slips showing an unrelated OCR line instead of the recipient name.
+- Fixed K PLUS slips losing Thai-format dates while retaining only the time.
+
+## Added in v1.2.2
+
+- Scroll-safe transaction history with today, week, month, and all-time filters.
+- A second filter for all entries, income only, or expenses only.
+- Debt payment history showing merchant, amount, date, and time for every saved slip.
+- Older debt payments automatically fall back to their saved timestamp when the slip time is unavailable.
 
 ## Security
 

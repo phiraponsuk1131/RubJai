@@ -9,6 +9,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -39,6 +40,8 @@ import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import java.text.NumberFormat
+import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Locale
 import kotlinx.coroutines.delay
 
@@ -62,6 +65,8 @@ data class DraftTransaction(
 )
 
 enum class TransactionType { INCOME, EXPENSE }
+private enum class EntryPeriod(val label: String) { TODAY("วันนี้"), WEEK("สัปดาห์นี้"), MONTH("เดือนนี้"), ALL("ทั้งหมด") }
+private enum class EntryKind(val label: String) { ALL("ทั้งหมด"), INCOME("รายรับ"), EXPENSE("รายจ่าย") }
 
 @Composable
 fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
@@ -96,6 +101,8 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
     var updateMessage by remember { mutableStateOf<String?>(null) }
     var showProfile by remember { mutableStateOf(false) }
     var showDebts by remember { mutableStateOf(false) }
+    var entryPeriod by remember { mutableStateOf(EntryPeriod.MONTH) }
+    var entryKind by remember { mutableStateOf(EntryKind.ALL) }
     LaunchedEffect(Unit) {
         repository.observe { entries = it }
         draft = sharedDraft(launchIntent)
@@ -122,7 +129,8 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
             topBar = { Surface(color = Color(0xFF071A3D)) { Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) { Text("RubJai", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold); Spacer(Modifier.weight(1f)); IconButton(onClick = { showProfile = true }) { Icon(Icons.Default.AccountCircle, "โปรไฟล์", tint = Color.White) } } } },
             floatingActionButton = { FloatingActionButton(onClick = { draft = DraftTransaction(type = TransactionType.INCOME, source = "manual_income", category = "รายรับ") }) { Icon(Icons.Default.Add, "เพิ่มรายรับ") } }
         ) { padding ->
-            LazyColumn(Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp), contentPadding = PaddingValues(vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            val visibleEntries = remember(entries, entryPeriod, entryKind) { entries.filterFor(entryPeriod, entryKind) }
+            LazyColumn(Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp), contentPadding = PaddingValues(top = 16.dp, bottom = 104.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 item { SummaryCard(entries) }
                 item {
                     Button(onClick = { imagePicker.launch("image/*") }, modifier = Modifier.fillMaxWidth(), enabled = !busy) {
@@ -131,8 +139,9 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
                 }
                 item { QuickOverview(entries) }
                 item { OutlinedButton(onClick = { showDebts = true }, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.CreditCard, null); Spacer(Modifier.width(8.dp)); Text("แผนปลดหนี้") } }
-                item { Text("ปุ่ม + ใช้เพิ่มรายรับด้วยตัวเลข ส่วนรายจ่ายให้เลือกสลิป แล้ว RubJai จะอ่านร้าน ยอด เวลา หมวด และหมายเหตุอัตโนมัติ", style = MaterialTheme.typography.bodySmall, color = Color.Gray) }
-                items(entries, key = { it.id }) { EntryRow(it) }
+                item { Text("รายการของคุณ", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold); EntryFilters(entryPeriod, entryKind, { entryPeriod = it }, { entryKind = it }) }
+                if (visibleEntries.isEmpty()) item { Card(colors = CardDefaults.cardColors(containerColor = Color.White)) { Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) { Text("ยังไม่มีรายการในช่วงนี้", fontWeight = FontWeight.SemiBold); Text("เพิ่มรายรับด้วยปุ่ม + หรือเลือกสลิปรายจ่าย", color = Color.Gray, style = MaterialTheme.typography.bodySmall) } } }
+                items(visibleEntries, key = { it.id }) { EntryRow(it) }
             }
         }
         draft?.let { current -> TransactionDialog(current, onDismiss = { draft = null }, onSave = { busy = true; repository.add(it, onDone = { error -> busy = false; message = error ?: "บันทึกแล้ว" }); draft = null }) }
@@ -173,7 +182,7 @@ private fun DebtPlannerScreen(onClose: () -> Unit) {
         LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
             item { Text("ชำระทีละเดือน แล้วดูเส้นชัยของคุณ", style = MaterialTheme.typography.titleMedium); Text("ระยะเวลาเป็นการประมาณจากยอดล่าสุดและดอกเบี้ยที่กรอก", color = Color.Gray, style = MaterialTheme.typography.bodySmall) }
             if (debts.isEmpty()) item { Card { Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) { Text("ยังไม่มีรายการหนี้"); TextButton(onClick = { create = true }) { Text("+ เพิ่มหนี้ก้อนแรก") } } } }
-            items(debts, key = { it.id }) { debt -> DebtCard(debt) { target = debt; picker.launch("image/*") } }
+            items(debts, key = { it.id }) { debt -> DebtCard(debt, repository) { target = debt; picker.launch("image/*") } }
         }
     }
     if (create) CreateDebtDialog({ create = false }) { name, balance, interest -> repository.add(name, balance, interest) { message = it ?: "เพิ่มหนี้แล้ว" }; create = false }
@@ -181,9 +190,16 @@ private fun DebtPlannerScreen(onClose: () -> Unit) {
     message?.let { AlertDialog(onDismissRequest = { message = null }, confirmButton = { TextButton(onClick = { message = null }) { Text("ตกลง") } }, text = { Text(it) }) }
 }
 
-@Composable private fun DebtCard(debt: Debt, pay: () -> Unit) {
+@Composable private fun DebtCard(debt: Debt, repository: DebtRepository, pay: () -> Unit) {
     val progress = if (debt.originalBalance > 0) (1 - debt.remainingBalance / debt.originalBalance).toFloat().coerceIn(0f, 1f) else 0f
-    Card { Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Row { Text(debt.name, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f)); Text(money(debt.remainingBalance), color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold) }; LinearProgressIndicator({ progress }, Modifier.fillMaxWidth()); Text("ชำระแล้ว ${(progress * 100).toInt()}% • ล่าสุด ${money(debt.latestPayment)}"); Text(debt.estimatedMonths()?.let { if (it == 0) "ปิดหนี้แล้ว" else "คาดว่าจะหมดในประมาณ $it เดือน" } ?: "ยอดล่าสุดยังไม่พอคำนวณระยะเวลา", fontWeight = FontWeight.SemiBold); Text(debt.encouragement(), color = Color(0xFF0B9B73)); Button(onClick = pay, modifier = Modifier.fillMaxWidth()) { Text("เลือกสลิปเพื่อตัดยอด") } } }
+    var payments by remember(debt.id) { mutableStateOf(emptyList<DebtPayment>()) }
+    DisposableEffect(debt.id) { val registration = repository.observePayments(debt.id) { payments = it }; onDispose { registration.remove() } }
+    Card(colors = CardDefaults.cardColors(containerColor = Color.White)) { Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Row { Text(debt.name, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f)); Text(money(debt.remainingBalance), color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold) }; LinearProgressIndicator({ progress }, Modifier.fillMaxWidth()); Text("ชำระแล้ว ${(progress * 100).toInt()}% • ล่าสุด ${money(debt.latestPayment)}"); Text(debt.estimatedMonths()?.let { if (it == 0) "ปิดหนี้แล้ว" else "คาดว่าจะหมดในประมาณ $it เดือน" } ?: "ยอดล่าสุดยังไม่พอคำนวณระยะเวลา", fontWeight = FontWeight.SemiBold); Text(debt.encouragement(), color = Color(0xFF0B9B73)); Button(onClick = pay, modifier = Modifier.fillMaxWidth()) { Text("เลือกสลิปเพื่อตัดยอด") }; if (payments.isNotEmpty()) { HorizontalDivider(); Text("ประวัติชำระ", fontWeight = FontWeight.Bold); payments.forEach { DebtPaymentRow(it) } } } }
+}
+
+@Composable private fun DebtPaymentRow(payment: DebtPayment) {
+    val savedTime = payment.paidAt?.let { SimpleDateFormat("dd/MM/yyyy HH:mm", Locale("th", "TH")).format(it) }.orEmpty()
+    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(payment.merchant.ifBlank { "ชำระหนี้" }, fontWeight = FontWeight.SemiBold); Text(payment.occurredAt.ifBlank { savedTime }.ifBlank { "ไม่พบวันที่/เวลา" }, style = MaterialTheme.typography.bodySmall, color = Color.Gray) }; Text("-${money(payment.amount)}", color = Color(0xFFD84A3A), fontWeight = FontWeight.Bold) }
 }
 
 @Composable private fun CreateDebtDialog(dismiss: () -> Unit, save: (String, Double, Double) -> Unit) {
@@ -254,7 +270,25 @@ private fun SummaryCard(entries: List<MoneyTransaction>) {
     }
 }
 
-@Composable private fun EntryRow(item: MoneyTransaction) { Card { Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(item.title.ifBlank { "ไม่ระบุรายการ" }, fontWeight = FontWeight.SemiBold); Text(listOf(item.category, item.occurredAt).filter(String::isNotBlank).joinToString(" • "), style = MaterialTheme.typography.bodySmall, color = Color.Gray) }; Text((if (item.type == "INCOME") "+" else "-") + money(item.amount), color = if (item.type == "INCOME") Color(0xFF0B9B73) else Color(0xFFD84A3A), fontWeight = FontWeight.Bold) } } }
+private fun List<MoneyTransaction>.filterFor(period: EntryPeriod, kind: EntryKind): List<MoneyTransaction> {
+    val calendar = Calendar.getInstance()
+    val threshold = when (period) {
+        EntryPeriod.ALL -> null
+        EntryPeriod.TODAY -> calendar.apply { set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0) }.time
+        EntryPeriod.WEEK -> calendar.apply { add(Calendar.DAY_OF_YEAR, -6); set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0) }.time
+        EntryPeriod.MONTH -> calendar.apply { set(Calendar.DAY_OF_MONTH, 1); set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0) }.time
+    }
+    return filter { item -> (threshold == null || item.createdAt?.let { !it.before(threshold) } == true) && when (kind) { EntryKind.ALL -> true; EntryKind.INCOME -> item.type == "INCOME"; EntryKind.EXPENSE -> item.type == "EXPENSE" } }
+}
+
+@Composable private fun EntryFilters(period: EntryPeriod, kind: EntryKind, setPeriod: (EntryPeriod) -> Unit, setKind: (EntryKind) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) { EntryPeriod.entries.forEach { FilterChip(selected = period == it, onClick = { setPeriod(it) }, label = { Text(it.label) }) } }
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) { EntryKind.entries.forEach { FilterChip(selected = kind == it, onClick = { setKind(it) }, label = { Text(it.label) }) } }
+    }
+}
+
+@Composable private fun EntryRow(item: MoneyTransaction) { Card(colors = CardDefaults.cardColors(containerColor = Color.White)) { Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(item.title.ifBlank { "ไม่ระบุรายการ" }, fontWeight = FontWeight.SemiBold); Text(listOf(item.category, item.occurredAt).filter(String::isNotBlank).joinToString(" • "), style = MaterialTheme.typography.bodySmall, color = Color.Gray) }; Text((if (item.type == "INCOME") "+" else "-") + money(item.amount), color = if (item.type == "INCOME") Color(0xFF0B9B73) else Color(0xFFD84A3A), fontWeight = FontWeight.Bold) } } }
 
 @Composable private fun QuickOverview(entries: List<MoneyTransaction>) {
     val top = entries.groupBy { it.category }.maxByOrNull { it.value.sumOf(MoneyTransaction::amount) }?.key ?: "ยังไม่มีข้อมูล"
