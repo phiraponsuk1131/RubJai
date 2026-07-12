@@ -6,6 +6,8 @@
 - Separated the verification flag from the mutable Firebase user object so Compose reliably redraws the screen.
 - Added scroll-safe transaction history filters for today, week, month, all records, income, and expenses.
 - Added debt payment history with merchant, amount, and slip date/time, falling back to the stored payment timestamp.
+- Split debt management into a scalable debt list and a separate detail/payment-history screen for each selected debt.
+- Added an accessible circular spending overview by category that follows the selected day, week, or month period, with text labels and amounts in addition to color.
 - Refined transaction, empty-state, and debt cards for a cleaner, more readable UI.
 - Fixed K PLUS MR.D.I.Y. merchant extraction by prioritizing the recipient's structured brand code and rejecting label-like fallback lines.
 - Added K PLUS Thai textual date extraction (for example `11 ก.ค. 69`) from the same line as the transaction time.

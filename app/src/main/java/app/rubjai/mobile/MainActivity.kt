@@ -10,6 +10,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -27,7 +29,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -140,6 +145,7 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
                 item { QuickOverview(entries) }
                 item { OutlinedButton(onClick = { showDebts = true }, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.CreditCard, null); Spacer(Modifier.width(8.dp)); Text("แผนปลดหนี้") } }
                 item { Text("รายการของคุณ", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold); EntryFilters(entryPeriod, entryKind, { entryPeriod = it }, { entryKind = it }) }
+                if (entryPeriod != EntryPeriod.ALL) item { SpendingOverview(entries.filterFor(entryPeriod, EntryKind.EXPENSE), entryPeriod) }
                 if (visibleEntries.isEmpty()) item { Card(colors = CardDefaults.cardColors(containerColor = Color.White)) { Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) { Text("ยังไม่มีรายการในช่วงนี้", fontWeight = FontWeight.SemiBold); Text("เพิ่มรายรับด้วยปุ่ม + หรือเลือกสลิปรายจ่าย", color = Color.Gray, style = MaterialTheme.typography.bodySmall) } } }
                 items(visibleEntries, key = { it.id }) { EntryRow(it) }
             }
@@ -174,15 +180,17 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
 @Composable
 private fun DebtPlannerScreen(onClose: () -> Unit) {
     val context = LocalContext.current; val repository = remember { DebtRepository() }
-    var debts by remember { mutableStateOf(emptyList<Debt>()) }; var create by remember { mutableStateOf(false) }; var target by remember { mutableStateOf<Debt?>(null) }; var draft by remember { mutableStateOf<DraftTransaction?>(null) }; var message by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(Unit) { repository.observe { debts = it } }
+    var debts by remember { mutableStateOf(emptyList<Debt>()) }; var create by remember { mutableStateOf(false) }; var selected by remember { mutableStateOf<Debt?>(null) }; var target by remember { mutableStateOf<Debt?>(null) }; var draft by remember { mutableStateOf<DraftTransaction?>(null) }; var message by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) { repository.observe { updated -> debts = updated; selected = selected?.let { current -> updated.firstOrNull { it.id == current.id } } } }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? -> if (uri != null) TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS).process(InputImage.fromFilePath(context, uri)).addOnSuccessListener { result -> val parsed = SlipParser.parse(result.text, "debt_slip"); if (parsed.amount.toDoubleOrNull()?.let { it > 0 } == true) draft = parsed else message = "อ่านยอดจากสลิปไม่พบ กรุณาเลือกสลิปที่ชัดเจน" }.addOnFailureListener { message = "อ่านสลิปไม่สำเร็จ" } }
     Column(Modifier.fillMaxSize()) {
-        Surface(color = Color(0xFF071A3D)) { Row(Modifier.fillMaxWidth().statusBarsPadding().padding(10.dp), verticalAlignment = Alignment.CenterVertically) { IconButton(onClick = onClose) { Icon(Icons.Default.ArrowBack, "กลับ", tint = Color.White) }; Text("แผนปลดหนี้", color = Color.White, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold); Spacer(Modifier.weight(1f)); IconButton(onClick = { create = true }) { Icon(Icons.Default.Add, "เพิ่มหนี้", tint = Color.White) } } }
+        Surface(color = Color(0xFF071A3D)) { Row(Modifier.fillMaxWidth().statusBarsPadding().padding(10.dp), verticalAlignment = Alignment.CenterVertically) { IconButton(onClick = { if (selected != null) selected = null else onClose() }) { Icon(Icons.Default.ArrowBack, "กลับ", tint = Color.White) }; Text(selected?.name ?: "รายการหนี้", color = Color.White, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold); Spacer(Modifier.weight(1f)); if (selected == null) IconButton(onClick = { create = true }) { Icon(Icons.Default.Add, "เพิ่มหนี้", tint = Color.White) } } }
         LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
-            item { Text("ชำระทีละเดือน แล้วดูเส้นชัยของคุณ", style = MaterialTheme.typography.titleMedium); Text("ระยะเวลาเป็นการประมาณจากยอดล่าสุดและดอกเบี้ยที่กรอก", color = Color.Gray, style = MaterialTheme.typography.bodySmall) }
-            if (debts.isEmpty()) item { Card { Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) { Text("ยังไม่มีรายการหนี้"); TextButton(onClick = { create = true }) { Text("+ เพิ่มหนี้ก้อนแรก") } } } }
-            items(debts, key = { it.id }) { debt -> DebtCard(debt, repository) { target = debt; picker.launch("image/*") } }
+            if (selected == null) {
+                item { Text("เลือกหนี้เพื่อดูรายละเอียดและประวัติชำระ", style = MaterialTheme.typography.titleMedium); Text("รองรับหนี้หลายก้อนและแยกประวัติของแต่ละรายการ", color = Color.Gray, style = MaterialTheme.typography.bodySmall) }
+                if (debts.isEmpty()) item { Card { Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) { Text("ยังไม่มีรายการหนี้"); TextButton(onClick = { create = true }) { Text("+ เพิ่มหนี้ก้อนแรก") } } } }
+                items(debts, key = { it.id }) { DebtListCard(it) { selected = it } }
+            } else item { DebtDetailCard(selected!!, repository) { target = selected; picker.launch("image/*") } }
         }
     }
     if (create) CreateDebtDialog({ create = false }) { name, balance, interest -> repository.add(name, balance, interest) { message = it ?: "เพิ่มหนี้แล้ว" }; create = false }
@@ -190,7 +198,12 @@ private fun DebtPlannerScreen(onClose: () -> Unit) {
     message?.let { AlertDialog(onDismissRequest = { message = null }, confirmButton = { TextButton(onClick = { message = null }) { Text("ตกลง") } }, text = { Text(it) }) }
 }
 
-@Composable private fun DebtCard(debt: Debt, repository: DebtRepository, pay: () -> Unit) {
+@Composable private fun DebtListCard(debt: Debt, open: () -> Unit) {
+    val progress = if (debt.originalBalance > 0) (1 - debt.remainingBalance / debt.originalBalance).toFloat().coerceIn(0f, 1f) else 0f
+    Card(Modifier.fillMaxWidth().clickable(onClick = open), colors = CardDefaults.cardColors(containerColor = Color.White)) { Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Row { Text(debt.name, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f)); Text(money(debt.remainingBalance), color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold) }; LinearProgressIndicator({ progress }, Modifier.fillMaxWidth()); Text("ชำระแล้ว ${debt.paymentsMade} ครั้ง • แตะเพื่อดูรายละเอียด", color = Color.Gray, style = MaterialTheme.typography.bodySmall) } }
+}
+
+@Composable private fun DebtDetailCard(debt: Debt, repository: DebtRepository, pay: () -> Unit) {
     val progress = if (debt.originalBalance > 0) (1 - debt.remainingBalance / debt.originalBalance).toFloat().coerceIn(0f, 1f) else 0f
     var payments by remember(debt.id) { mutableStateOf(emptyList<DebtPayment>()) }
     DisposableEffect(debt.id) { val registration = repository.observePayments(debt.id) { payments = it }; onDispose { registration.remove() } }
@@ -285,6 +298,27 @@ private fun List<MoneyTransaction>.filterFor(period: EntryPeriod, kind: EntryKin
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) { EntryPeriod.entries.forEach { FilterChip(selected = period == it, onClick = { setPeriod(it) }, label = { Text(it.label) }) } }
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) { EntryKind.entries.forEach { FilterChip(selected = kind == it, onClick = { setKind(it) }, label = { Text(it.label) }) } }
+    }
+}
+
+@Composable private fun SpendingOverview(entries: List<MoneyTransaction>, period: EntryPeriod) {
+    val groups = entries.groupBy { it.category.ifBlank { "อื่น ๆ" } }.mapValues { it.value.sumOf(MoneyTransaction::amount) }.entries.sortedByDescending { it.value }
+    val total = groups.sumOf { it.value }
+    val colors = listOf(Color(0xFF0B9B73), Color(0xFFFF8A65), Color(0xFF5C6BC0), Color(0xFFFFC107), Color(0xFF26A69A), Color(0xFFAB47BC))
+    val description = if (total > 0) "ภาพรวมรายจ่าย${period.label} รวม ${money(total)} จำนวน ${groups.size} หมวด" else "ยังไม่มีรายจ่าย${period.label}"
+    Card(colors = CardDefaults.cardColors(containerColor = Color.White)) {
+        Column(Modifier.fillMaxWidth().padding(18.dp).semantics { contentDescription = description }, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("ภาพรวมรายจ่าย • ${period.label}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            if (total <= 0) Text("ยังไม่มีรายจ่ายในช่วงนี้", color = Color.Gray)
+            else Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+                Canvas(Modifier.size(128.dp)) {
+                    drawArc(Color(0xFFE8EEF3), -90f, 360f, false, style = Stroke(22.dp.toPx()))
+                    var start = -90f
+                    groups.forEachIndexed { index, group -> val sweep = (group.value / total * 360).toFloat(); drawArc(colors[index % colors.size], start, sweep, false, style = Stroke(22.dp.toPx())); start += sweep }
+                }
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) { Text(money(total), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold); groups.take(5).forEachIndexed { index, group -> Row(verticalAlignment = Alignment.CenterVertically) { Surface(Modifier.size(12.dp), shape = RoundedCornerShape(50), color = colors[index % colors.size]) {}; Spacer(Modifier.width(8.dp)); Text(group.key, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall); Text(money(group.value), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold) } } }
+            }
+        }
     }
 }
 

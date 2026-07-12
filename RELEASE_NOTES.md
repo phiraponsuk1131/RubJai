@@ -13,6 +13,8 @@
 - A second filter for all entries, income only, or expenses only.
 - Debt payment history showing merchant, amount, date, and time for every saved slip.
 - Older debt payments automatically fall back to their saved timestamp when the slip time is unavailable.
+- Multiple debts now appear in a compact selection list; tapping one opens its own payoff details and payment history.
+- Added a category-based circular spending overview for today, this week, and this month, with screen-reader descriptions and a text legend.
 
 ## Security
 
