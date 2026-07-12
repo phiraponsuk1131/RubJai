@@ -7,6 +7,8 @@
 - Skipped previously processed MediaStore images before OCR, recognized K PLUS `DTF` references, and raised the bounded daily coverage to 200 new images.
 - Ensured the ML Kit recognizer and MediaStore cursor close safely when scanning fails or permissions change.
 - Refactored scanner scheduling and processing branches for clearer maintenance without changing the approval requirement.
+- Replaced automatic periodic scanning with an immediate `Sync today` button; first use requires an explicit consent dialog and consent can be revoked.
+- Shortened current release notes so the in-app update popup shows only essential changes.
 
 ## 1.3.1
 

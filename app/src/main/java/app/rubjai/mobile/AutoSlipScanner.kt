@@ -3,9 +3,8 @@ package app.rubjai.mobile
 import android.content.ContentUris
 import android.content.Context
 import android.provider.MediaStore
-import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.Worker
 import androidx.work.WorkerParameters
@@ -18,7 +17,6 @@ import org.json.JSONObject
 import java.util.Calendar
 import java.util.Date
 import java.util.UUID
-import java.util.concurrent.TimeUnit
 
 data class PendingSlip(val id: String, val draft: DraftTransaction)
 
@@ -53,32 +51,20 @@ object PendingSlipStore {
     private fun JSONObject.toPendingSlip() = PendingSlip(getString("id"), DraftTransaction(optString("amount"), optString("title"), TransactionType.EXPENSE, "auto_kplus", optString("rawText"), optString("category", "อื่น ๆ"), optString("remark"), optString("occurredAt")))
 }
 
-object AutoSlipScheduler {
-    private const val WORK = "rubjai_daily_kplus_scan"
+object KPlusSyncManager {
+    private const val WORK = "rubjai_kplus_sync_now"
     private const val PREFS = "auto_kplus_scan"
-    fun enabled(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean("enabled", false)
-    fun setEnabled(context: Context, enabled: Boolean) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean("enabled", enabled).apply()
-        val manager = WorkManager.getInstance(context)
-        if (!enabled) { manager.cancelUniqueWork(WORK); return }
-        val now = Calendar.getInstance()
-        val dailyRun = Calendar.getInstance().apply {
-            set(Calendar.HOUR_OF_DAY, 23); set(Calendar.MINUTE, 30); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
-            if (!after(now)) add(Calendar.DAY_OF_YEAR, 1)
-        }
-        val request = PeriodicWorkRequestBuilder<KPlusScanWorker>(24, TimeUnit.HOURS)
-            .setInitialDelay(dailyRun.timeInMillis - now.timeInMillis, TimeUnit.MILLISECONDS)
-            .build()
-        manager.enqueueUniquePeriodicWork(WORK, ExistingPeriodicWorkPolicy.UPDATE, request)
-        manager.enqueue(OneTimeWorkRequestBuilder<KPlusScanWorker>().build())
-    }
+    fun hasConsent(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean("consent", false)
+    fun setConsent(context: Context, consent: Boolean) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean("consent", consent).apply()
+    fun syncNow(context: Context) = WorkManager.getInstance(context).enqueueUniqueWork(WORK, ExistingWorkPolicy.REPLACE, OneTimeWorkRequestBuilder<KPlusScanWorker>().build())
+    fun revoke(context: Context) { setConsent(context, false); WorkManager.getInstance(context).cancelUniqueWork(WORK) }
 }
 
 class KPlusScanWorker(context: Context, params: WorkerParameters) : Worker(context, params) {
     private val kPlusReference = Regex("[0-9]{10,}(?:CPM|DQR|DTF)[0-9]+", RegexOption.IGNORE_CASE)
 
     override fun doWork(): Result {
-        if (!AutoSlipScheduler.enabled(applicationContext)) return Result.success()
+        if (!KPlusSyncManager.hasConsent(applicationContext)) return Result.success()
         val startToday = Calendar.getInstance().apply { set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0) }
         val startTomorrow = (startToday.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, 1) }
         val since = startToday.timeInMillis / 1000

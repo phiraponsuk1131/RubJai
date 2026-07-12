@@ -114,7 +114,8 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
     var showDebts by remember { mutableStateOf(false) }
     var entryPeriod by remember { mutableStateOf(EntryPeriod.MONTH) }
     var entryKind by remember { mutableStateOf(EntryKind.ALL) }
-    var autoScanEnabled by remember { mutableStateOf(AutoSlipScheduler.enabled(context)) }
+    var syncConsent by remember { mutableStateOf(KPlusSyncManager.hasConsent(context)) }
+    var showSyncConsent by remember { mutableStateOf(false) }
     var pendingSlips by remember { mutableStateOf(PendingSlipStore.load(context)) }
     var showPending by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
@@ -139,9 +140,8 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
     }
     val scanPermission = if (android.os.Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_IMAGES else Manifest.permission.READ_EXTERNAL_STORAGE
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        autoScanEnabled = granted
-        AutoSlipScheduler.setEnabled(context, granted)
-        if (!granted) message = "ต้องอนุญาตการเข้าถึงรูปจึงจะตรวจสลิป K PLUS อัตโนมัติได้"
+        if (granted) { KPlusSyncManager.syncNow(context); message = "เริ่มซิงสลิป K PLUS ของวันนี้แล้ว" }
+        else message = "ต้องอนุญาตการเข้าถึงรูปจึงจะซิงสลิป K PLUS วันนี้ได้"
     }
 
     MaterialTheme(colorScheme = colors) {
@@ -157,7 +157,7 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
                         Icon(Icons.Default.ImageSearch, null); Spacer(Modifier.width(8.dp)); Text(if (busy) "กำลังอ่านสลิป…" else "เลือกสลิปจากเครื่อง")
                     }
                 }
-                item { AutoScanCard(autoScanEnabled, pendingSlips.size, onToggle = { enable -> if (!enable) { AutoSlipScheduler.setEnabled(context, false); autoScanEnabled = false } else if (ContextCompat.checkSelfPermission(context, scanPermission) == PackageManager.PERMISSION_GRANTED) { AutoSlipScheduler.setEnabled(context, true); autoScanEnabled = true } else permissionLauncher.launch(scanPermission) }, onReview = { pendingSlips = PendingSlipStore.load(context); showPending = true }) }
+                item { KPlusSyncCard(syncConsent, pendingSlips.size, onSync = { if (!syncConsent) showSyncConsent = true else if (ContextCompat.checkSelfPermission(context, scanPermission) == PackageManager.PERMISSION_GRANTED) { KPlusSyncManager.syncNow(context); message = "เริ่มซิงสลิป K PLUS ของวันนี้แล้ว" } else permissionLauncher.launch(scanPermission) }, onRevoke = { KPlusSyncManager.revoke(context); syncConsent = false }, onReview = { pendingSlips = PendingSlipStore.load(context); showPending = true }) }
                 item { QuickOverview(entries) }
                 item { OutlinedButton(onClick = { showDebts = true }, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.CreditCard, null); Spacer(Modifier.width(8.dp)); Text("แผนปลดหนี้") } }
                 item { Text("รายการของคุณ", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold); EntryFilters(entryPeriod, entryKind, { entryPeriod = it }, { entryKind = it }) }
@@ -168,6 +168,7 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
         }
         draft?.let { current -> TransactionDialog(current, onDismiss = { draft = null }, onSave = { busy = true; repository.add(it, onDone = { error -> busy = false; message = error ?: "บันทึกแล้ว" }); draft = null }) }
         message?.let { AlertDialog(onDismissRequest = { message = null }, confirmButton = { TextButton(onClick = { message = null }) { Text("ตกลง") } }, text = { Text(it) }) }
+        if (showSyncConsent) AlertDialog(onDismissRequest = { showSyncConsent = false }, title = { Text("ยินยอมซิงสลิป K PLUS?") }, text = { Text("RubJai จะอ่านเฉพาะรูปที่เพิ่มในวันนี้ด้วย OCR บนเครื่อง ผลจะอยู่ในคิวรออนุมัติและยังไม่บันทึกจนกว่าคุณจะยืนยัน") }, confirmButton = { Button(onClick = { KPlusSyncManager.setConsent(context, true); syncConsent = true; showSyncConsent = false; if (ContextCompat.checkSelfPermission(context, scanPermission) == PackageManager.PERMISSION_GRANTED) { KPlusSyncManager.syncNow(context); message = "เริ่มซิงสลิป K PLUS ของวันนี้แล้ว" } else permissionLauncher.launch(scanPermission) }) { Text("ยินยอมและซิง") } }, dismissButton = { TextButton(onClick = { showSyncConsent = false }) { Text("ยังไม่ยินยอม") } })
         if (showPending) PendingSlipDialog(pendingSlips, onClose = { showPending = false }, onApprove = { pending -> repository.add(pending.draft) { error -> if (error == null) { PendingSlipStore.remove(context, pending.id); pendingSlips = PendingSlipStore.load(context); message = "บันทึกรายจ่ายแล้ว" } else message = error } }, onReject = { pending -> PendingSlipStore.remove(context, pending.id); pendingSlips = PendingSlipStore.load(context); if (pendingSlips.isEmpty()) showPending = false })
         availableUpdate?.let { update ->
             AlertDialog(
@@ -301,11 +302,14 @@ private fun SummaryCard(entries: List<MoneyTransaction>) {
     }
 }
 
-@Composable private fun AutoScanCard(enabled: Boolean, pendingCount: Int, onToggle: (Boolean) -> Unit, onReview: () -> Unit) {
+@Composable private fun KPlusSyncCard(consented: Boolean, pendingCount: Int, onSync: () -> Unit, onRevoke: () -> Unit, onReview: () -> Unit) {
     Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F7F2))) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text("ตรวจสลิป K PLUS รายวัน", fontWeight = FontWeight.Bold); Text(if (enabled) "ตรวจเฉพาะรูปใหม่ ผลจะรอคุณอนุมัติ" else "ปิดอยู่ รูปจะไม่ถูกตรวจอัตโนมัติ", style = MaterialTheme.typography.bodySmall, color = Color.Gray) }; Switch(checked = enabled, onCheckedChange = onToggle, modifier = Modifier.semantics { contentDescription = "เปิดหรือปิดการตรวจสลิป K PLUS รายวัน" }) }
+            Text("ซิงสลิป K PLUS วันนี้", fontWeight = FontWeight.Bold)
+            Text("กดเมื่อต้องการตรวจรูปของวันนี้ ผลจะรอคุณอนุมัติ", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+            Button(onClick = onSync, modifier = Modifier.fillMaxWidth().semantics { contentDescription = "ซิงสลิป K PLUS ของวันนี้ทันที" }) { Text("ซิงวันนี้") }
             if (pendingCount > 0) Button(onClick = onReview, modifier = Modifier.fillMaxWidth()) { Text("ตรวจรายการรออนุมัติ $pendingCount รายการ") }
+            if (consented) TextButton(onClick = onRevoke, modifier = Modifier.align(Alignment.End)) { Text("ยกเลิกความยินยอม") }
         }
     }
 }
