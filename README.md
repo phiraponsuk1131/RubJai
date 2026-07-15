@@ -1,58 +1,67 @@
-# RubJai
+# RubJai 2.0.0
 
-RubJai is an Android income, expense, and debt-payoff tracker built with Kotlin and Jetpack Compose. Package: `app.rubjai.mobile`; minSdk 23; targetSdk 36; version 1.3.3.
+RubJai คือแอป Android สำหรับบันทึกรายรับ รายจ่าย สรุปการใช้เงิน และวางแผนปลดหนี้ พัฒนาด้วย Kotlin และ Jetpack Compose
 
-## Features
+- ชื่อผู้ช่วยในแอป: **น้องรับจ่าย**
+- Package: `app.rubjai.mobile`
+- minSdk 23 / targetSdk 36
+- versionCode 11 / versionName 2.0.0
 
-- Add income or salary directly as a number; income does not require a slip.
-- Expenses come from a user-selected slip. RubJai maps the positive amount, full date/time, and an expense category; unreliable OCR recipient names are not shown. Unknown personal transfers use `ใช้จ่ายทั่วไป`.
-- Non-slip images or images with no readable positive amount are rejected instead of opening an empty amount form.
-- Receive text or slip images through Android Share, including content explicitly shared from LINE.
-- Register or sign in with email/password, confirm Firebase's email verification link, and edit display name and phone in a scroll-safe profile dialog.
-- Show income, expenses, and current balance; sync transactions to each signed-in user's Firestore path.
-- Always show extracted data for confirmation before saving.
-- On-demand K PLUS sync checks images added during the current calendar day only. First use requires explicit consent; results stay in a local approval queue until confirmed or rejected.
-- Check the public RubJai GitHub Release at startup and offer an in-app APK download with progress.
-- Filter the scrollable transaction history by today, week, month, or all records and by income or expense.
-- Create debts, apply a monthly payment from a selected slip, reject duplicate slips, show payment history with date/time, estimate payoff months from the latest payment and annual interest, and show progress encouragement.
+## การใช้งานหลัก
 
-RubJai cannot directly read private LINE chats. LINE does not expose a consumer API for another Android app to download personal bank chats. The safe supported flow is Share to RubJai. Notification or Accessibility scraping is intentionally excluded.
+1. หน้าต้อนรับและแนะนำความสามารถของแอป
+2. ยอมรับข้อตกลงและนโยบายจัดการข้อมูล
+3. เลือกสิทธิ์เข้าถึงรูป โดยสามารถข้ามและอนุญาตภายหลังได้
+4. สมัครหรือเข้าสู่ระบบด้วยเบอร์มือถือและ Firebase SMS OTP
+5. เพิ่มรายรับเป็นตัวเลข หรือเลือกสลิป K PLUS เพื่ออ่านยอด วันที่ เวลา และหมวดรายจ่าย
+6. ตรวจสอบรายการก่อนบันทึก แก้ไขหรือลบรายการของตัวเองได้
+7. กรองรายการตามวัน สัปดาห์ เดือน ประเภท และดูสรุปตามหมวด
+8. สร้างหนี้หลายก้อน ใช้สลิปตัดยอด ดูประวัติและประมาณเดือนที่จะชำระหมด
+9. รีเซ็ตเฉพาะข้อมูลของบัญชี หรือเลือกลบบัญชีถาวรแล้วสมัครใหม่ได้
 
-## Firebase setup — do this before GitHub upload
+## ความเป็นส่วนตัวและการกันข้อมูลซ้ำ
 
-1. Open Firebase Console and create a new project, for example `rubjai-app`. Do not reuse ThaiGuard's project.
-2. Add an Android app with package name exactly `app.rubjai.mobile`.
-3. Download `google-services.json` and save it locally as `app/google-services.json`. It is ignored by Git.
-4. In Authentication > Sign-in method, enable Email/Password. Google and Anonymous are not used. Firebase sends a secure verification link; numeric OTP is not used.
-5. Create Cloud Firestore, choose the region nearest your users, then deploy `firestore.rules` with `firebase deploy --only firestore:rules`.
-6. In GitHub Secrets, add `GOOGLE_SERVICES_JSON_BASE64` containing the Base64 form of `google-services.json`.
-7. Create one permanent release keystore and add `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and `ANDROID_KEY_PASSWORD` as repository secrets. Never commit the key.
-8. Enable App Check with Play Integrity before public distribution and monitor Firestore quotas/costs.
+- ผู้ใช้เป็นคนเลือกสลิปหรือกดสแกนรูปของวันนี้เอง
+- รูปถูกอ่านชั่วคราวด้วย OCR บนเครื่อง ไม่อัปโหลด ไม่คัดลอก และไม่เก็บรูปใน Firebase
+- รายการที่สแกนอัตโนมัติจะอยู่ในคิวบนเครื่องจนผู้ใช้อนุมัติหรือปฏิเสธ
+- Firestore เก็บเฉพาะยอด ประเภท หมวด โน้ต วันเวลา และรหัส SHA-256 สำหรับกันสลิปซ้ำ
+- ข้อมูลอยู่ใต้ `users/{uid}` และกฎ Firestore อนุญาตให้เจ้าของบัญชีอ่านหรือแก้ข้อมูลของตัวเองเท่านั้น
+- RubJai ไม่อ่านแชต LINE และไม่ใช้ Accessibility ดึงข้อความส่วนตัว
 
-PowerShell can create the Firebase secret value with:
+## ตั้งค่า Firebase
+
+1. ใช้ Firebase project `rubjai-60e6d` และเพิ่ม Android app package `app.rubjai.mobile`
+2. วาง `google-services.json` ที่ `app/google-services.json` เฉพาะในเครื่อง ไฟล์นี้ถูก ignore และห้าม commit
+3. ไปที่ Authentication > Sign-in method แล้วเปิด **Phone**
+4. เพิ่ม SHA-1 และ SHA-256 ของ signing certificate ใน Firebase Android app เพื่อให้ Phone Auth ทำงานกับ APK จริง
+5. เปิด Cloud Firestore แล้ว deploy `firestore.rules`
+6. เปิด App Check ด้วย Play Integrity ก่อนเผยแพร่สู่ผู้ใช้ทั่วไป
+7. ตั้ง GitHub Secret `GOOGLE_SERVICES_JSON_BASE64` จากไฟล์ Firebase จริง
+8. ตั้ง release signing secrets: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`
+
+สร้างค่า Firebase secret ด้วย PowerShell:
 
 ```powershell
 [Convert]::ToBase64String([IO.File]::ReadAllBytes("app/google-services.json"))
 ```
 
-## Firestore schema
+## โครงสร้าง Firestore
 
-`users/{uid}` stores the user's editable profile. Transactions live under `transactions`. Debt plans live under `debts/{debtId}`, with immutable slip payments under `debts/{debtId}/payments/{slipFingerprint}`. Rules prevent cross-user reads. Collections are created automatically.
+- `users/{uid}`: โปรไฟล์เจ้าของบัญชี
+- `users/{uid}/transactions/{transactionId}`: รายรับและรายจ่าย
+- `users/{uid}/debts/{debtId}`: หนี้แต่ละก้อน
+- `users/{uid}/debts/{debtId}/payments/{slipFingerprint}`: ประวัติชำระที่กันสลิปซ้ำ
 
-## Build
+คอลเลกชันจะถูกสร้างเมื่อแอปบันทึกข้อมูลครั้งแรก ผู้ใช้ไม่ต้องสร้างเองใน Firebase Console
 
-Use JDK 17 and Gradle 9.4.1:
+## Build และ Release
+
+โปรเจกต์ใช้ JDK 17 และ Gradle 9.4.1:
 
 ```shell
 gradle :app:assembleDebug
 ```
 
-GitHub Actions builds a signed release APK on every push without running tests. A `v*` tag also creates a GitHub Release using `RELEASE_NOTES.md`.
-Before secrets exist, Actions creates a debug artifact with a build-only Firebase placeholder. Configure the Firebase and signing secrets before distributing or tagging; only the signed build with the real Firebase config is a production APK.
-The in-app updater reads `https://github.com/phiraponsuk1131/RubJai/releases/latest`; Actions artifacts alone do not trigger update popups. The release must contain a public APK and its tag must be newer than `versionName`.
+GitHub Actions บิลด์ APK ทุกครั้งที่ push โดยไม่รันชุดทดสอบ และแนบ APK กับ SHA-256 เป็น artifact เมื่อ push tag รูปแบบ `v*` จะสร้าง GitHub Release จาก `RELEASE_NOTES.md`
 
-## Privacy
-
-Manual slip selection, LINE sharing, and K PLUS sync are user-initiated. K PLUS sync requires explicit first-use consent and photo permission, checks only today's images, and can have consent revoked at any time. OCR and the pending approval queue remain on-device. Only a user-confirmed transaction and at most 3,000 characters of source text are uploaded to the user's Firestore area. RubJai never reads LINE chats.
-
-Admin-only destructive controls are hidden unless the signed-in Firebase ID token contains the custom claim `admin: true`. Admin passwords are never stored in source code, Firestore, GitHub, or the APK.
+ระบบอัปเดตในแอปอ่านจาก [GitHub Releases](https://github.com/phiraponsuk1131/RubJai/releases/latest) และเปรียบเทียบ `versionName` แบบตัวเลข ดังนั้น release ต้องมี tag ที่ใหม่กว่าและมีไฟล์ APK แนบอยู่

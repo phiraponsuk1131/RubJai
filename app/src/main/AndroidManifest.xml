@@ -5,9 +5,9 @@
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <application
         android:allowBackup="true"
-        android:icon="@drawable/rubjai_icon"
+        android:icon="@drawable/rubjai_mascot"
         android:label="RubJai"
-        android:roundIcon="@drawable/rubjai_icon"
+        android:roundIcon="@drawable/rubjai_mascot"
         android:supportsRtl="true"
         android:theme="@style/Theme.RubJai">
         <activity android:name=".MainActivity" android:exported="true">

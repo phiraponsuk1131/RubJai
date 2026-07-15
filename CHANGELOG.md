@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.0.0
+
+- Rebuilt onboarding as an original RubJai flow covering features, terms, privacy, photo permission, approval, and phone sign-in.
+- Replaced email-first authentication with Firebase Phone Auth and six-digit SMS OTP.
+- Added the original “น้องรับจ่าย” bear mascot and a distinct deep-teal, cream, mint, coral, charcoal, and plum palette.
+- Added transaction detail, edit, delete, category, note, and date/time controls.
+- Added deterministic SHA-256 slip fingerprints and Firestore transaction checks to reject duplicate expense slips.
+- Stopped uploading slip images and full OCR text; only confirmed extracted fields and duplicate fingerprints are stored.
+- Added owner-only usage reset and permanent account deletion with a fresh-registration path.
+- Added debt deletion including its payment history and changed debt-payment duplicate protection to SHA-256.
+- Expanded first-run documentation and updated GitHub/Firebase setup for version 2.0.0 and Phone Auth.
+
 ## 1.3.3
 
 - Replaced unreliable OCR recipient/merchant titles with the resulting expense category in confirmation and saved transaction rows.
@@ -29,8 +41,6 @@
 - Removed unused income-detection branches from the expense-only slip parser.
 - Restricted daily automatic scanning to MediaStore images added between local 00:00 today and 00:00 tomorrow; removed the previous two-day lookback.
 - Scheduled the daily attempt near 23:30 so the current day has content to scan, while keeping Android's deferrable-work limitation.
-- Cleared Firebase test usage data and non-admin test accounts for a fresh onboarding test while preserving the verified admin account and its secure custom claim.
-- Changed the admin destructive control from deleting Firebase Authentication to clearing usage data only, including the local pending-slip queue, while preserving password, verification, and admin claim.
 
 ## 1.3.0
 
@@ -95,5 +105,3 @@
 - Replaced the launcher asset directly with the latest user-provided centered image without additional cropping.
 - Bumped the app to `1.2.0` for the new scan and UI behavior.
 - Updated the project agreement to avoid repeated conversational approval requests for the already-authorized RubJai delivery workflow and to keep reports token-efficient.
-- Added an account-and-owned-data deletion workflow, hidden unless Firebase returns the secure custom claim `admin: true`; rejected hardcoded admin credentials because APKs can be reverse engineered.
-- Assigned Firebase custom claim `admin: true` to the user-provided UID using the local service account without committing credentials.

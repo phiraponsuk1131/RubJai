@@ -5,6 +5,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import java.util.Date
 import java.util.UUID
+import java.security.MessageDigest
 import kotlin.math.ceil
 import kotlin.math.ln
 
@@ -57,13 +58,27 @@ class DebtRepository {
     }
     fun applySlip(debt: Debt, draft: DraftTransaction, done: (String?) -> Unit) {
         val amount = draft.amount.toDoubleOrNull() ?: return done("อ่านยอดจากสลิปไม่ได้")
-        val fingerprint = draft.rawText.trim().lowercase().hashCode().toUInt().toString(16)
+        val canonical = draft.rawText.lowercase().replace(Regex("\\s+"), " ").trim()
+            .ifBlank { "${draft.amount}|${draft.occurredAt}|${draft.category}" }
+        val fingerprint = MessageDigest.getInstance("SHA-256").digest(canonical.toByteArray())
+            .joinToString("") { "%02x".format(it) }.take(32)
         val debtRef = debts().document(debt.id); val paymentRef = debtRef.collection("payments").document(fingerprint)
         db.runTransaction { tx ->
             if (tx.get(paymentRef).exists()) error("DUPLICATE")
             val latest = tx.get(debtRef).toObject(Debt::class.java) ?: error("NOT_FOUND")
-            tx.set(paymentRef, mapOf("amount" to amount, "merchant" to draft.title, "occurredAt" to draft.occurredAt, "remark" to draft.remark, "reference" to fingerprint, "paidAt" to Date(), "rawText" to draft.rawText.take(3000)))
+            tx.set(paymentRef, mapOf("amount" to amount, "merchant" to draft.title.take(200), "occurredAt" to draft.occurredAt.take(50), "remark" to draft.remark.take(500), "reference" to fingerprint, "paidAt" to Date()))
             tx.update(debtRef, mapOf("remainingBalance" to (latest.remainingBalance - amount).coerceAtLeast(0.0), "latestPayment" to amount, "paymentsMade" to latest.paymentsMade + 1))
         }.addOnSuccessListener { done(null) }.addOnFailureListener { done(if (it.message == "DUPLICATE") "สลิปนี้ถูกใช้ตัดยอดแล้ว" else it.localizedMessage) }
+    }
+
+    fun delete(debt: Debt, done: (String?) -> Unit) {
+        val debtRef = debts().document(debt.id)
+        debtRef.collection("payments").get().addOnSuccessListener { snapshot ->
+            val batch = db.batch()
+            snapshot.documents.forEach { batch.delete(it.reference) }
+            batch.delete(debtRef)
+            batch.commit().addOnSuccessListener { done(null) }
+                .addOnFailureListener { done(it.localizedMessage ?: "ลบหนี้ไม่สำเร็จ") }
+        }.addOnFailureListener { done(it.localizedMessage ?: "อ่านประวัติชำระไม่สำเร็จ") }
     }
 }
