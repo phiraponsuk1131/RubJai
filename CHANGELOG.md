@@ -3,6 +3,7 @@
 ## 2.0.1
 
 - Replaced the mascot logo's two-tone frame with one continuous solid emerald-green background while preserving the bear and wallet artwork.
+- Fixed the onboarding action button argument order so the release APK compiles successfully in GitHub Actions.
 
 ## 2.0.0
 

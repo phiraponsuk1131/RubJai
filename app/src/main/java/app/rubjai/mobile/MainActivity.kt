@@ -334,7 +334,7 @@ private fun OnboardingScreen(done: () -> Unit) {
             Surface(color = RubCream) {
                 Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(18.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                     if (page > 0) TextButton(onClick = { page-- }, Modifier.weight(.35f)) { Text("ย้อนกลับ", color = RubInk, fontWeight = FontWeight.Bold) }
-                    Button(enabled = canContinue, onClick = { if (page < pages.lastIndex) page++ else done() }, Modifier.weight(1f).height(56.dp), shape = RoundedCornerShape(20.dp), colors = ButtonDefaults.buttonColors(containerColor = RubCoral, contentColor = RubInk)) { Text(current.third, fontWeight = FontWeight.Black) }
+                    Button(onClick = { if (page < pages.lastIndex) page++ else done() }, modifier = Modifier.weight(1f).height(56.dp), enabled = canContinue, shape = RoundedCornerShape(20.dp), colors = ButtonDefaults.buttonColors(containerColor = RubCoral, contentColor = RubInk)) { Text(current.third, fontWeight = FontWeight.Black) }
                 }
             }
         }
