@@ -567,6 +567,13 @@ private fun AuthScreen(repository: AuthRepository) {
         Column(Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
             Box(Modifier.fillMaxWidth().height(280.dp).background(Brush.verticalGradient(listOf(RubCoral, RubCream))), contentAlignment = Alignment.BottomCenter) {
                 androidx.compose.foundation.Image(painterResource(R.drawable.rubjai_mascot), null, Modifier.size(190.dp), contentScale = ContentScale.Fit)
+                Text(
+                    text = "เวอร์ชัน ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+                    modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(12.dp),
+                    color = RubInk.copy(alpha = .72f),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                )
             }
             Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Spacer(Modifier.height(24.dp))

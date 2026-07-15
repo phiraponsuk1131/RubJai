@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.0.2
+
+- Show the installed APK version name and version code in the top-right corner of the phone sign-in screen.
+
 ## 2.0.1
 
 - Replaced the mascot logo's two-tone frame with one continuous solid emerald-green background while preserving the bear and wallet artwork.
