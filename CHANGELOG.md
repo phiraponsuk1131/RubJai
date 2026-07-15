@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.0.4
+
+- Enable BuildConfig generation so the APK compiles with its displayed version information.
+
 ## 2.0.3
 
 - Added an anonymous trial sign-in that bypasses SMS OTP for reviewing the app before Firebase Billing is enabled.

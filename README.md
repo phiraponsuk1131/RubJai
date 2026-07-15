@@ -1,11 +1,11 @@
-# RubJai 2.0.3
+# RubJai 2.0.4
 
 RubJai คือแอป Android สำหรับบันทึกรายรับ รายจ่าย สรุปการใช้เงิน และวางแผนปลดหนี้ พัฒนาด้วย Kotlin และ Jetpack Compose
 
 - ชื่อผู้ช่วยในแอป: **น้องรับจ่าย**
 - Package: `app.rubjai.mobile`
 - minSdk 23 / targetSdk 36
-- versionCode 14 / versionName 2.0.3
+- versionCode 15 / versionName 2.0.4
 
 ## การใช้งานหลัก
 

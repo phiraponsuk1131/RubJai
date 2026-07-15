@@ -12,8 +12,8 @@ android {
         applicationId = "app.rubjai.mobile"
         minSdk = 23
         targetSdk = 36
-        versionCode = 14
-        versionName = "2.0.3"
+        versionCode = 15
+        versionName = "2.0.4"
     }
 
     val releaseStoreFile = System.getenv("SIGNING_STORE_FILE")
@@ -35,7 +35,10 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
 }
 
 dependencies {
