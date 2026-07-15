@@ -13,6 +13,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
@@ -40,6 +43,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
@@ -95,12 +99,20 @@ enum class TransactionType { INCOME, EXPENSE }
 private enum class EntryPeriod(val label: String) { TODAY("วันนี้"), WEEK("สัปดาห์นี้"), MONTH("เดือนนี้"), ALL("ทั้งหมด") }
 private enum class EntryKind(val label: String) { ALL("ทั้งหมด"), INCOME("รายรับ"), EXPENSE("รายจ่าย") }
 
+private val RubInk = Color(0xFF082F36)
+private val RubPanel = Color(0xFF124A50)
+private val RubCream = Color(0xFFFFF7E8)
+private val RubCoral = Color(0xFFFF8A72)
+private val RubMint = Color(0xFF72DCC0)
+private val RubPlum = Color(0xFF765C80)
+private val RubMuted = Color(0xFFBBD5D1)
+
 @Composable
 fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
     val context = LocalContext.current
     val authRepository = remember { AuthRepository() }
     val setup = remember { context.getSharedPreferences("rubjai_setup", Context.MODE_PRIVATE) }
-    var onboardingDone by remember { mutableStateOf(setup.getBoolean("onboarding_v2", false)) }
+    var onboardingDone by remember { mutableStateOf(setup.getBoolean("onboarding_v201", false)) }
     var currentUser by remember { mutableStateOf<FirebaseUser?>(authRepository.auth.currentUser) }
     var verificationPassed by remember(currentUser?.uid) { mutableStateOf(currentUser?.phoneNumber != null || currentUser?.isEmailVerified == true) }
     DisposableEffect(authRepository) {
@@ -111,16 +123,17 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
         authRepository.auth.addAuthStateListener(listener)
         onDispose { authRepository.auth.removeAuthStateListener(listener) }
     }
-    val colors = lightColorScheme(
-        primary = Color(0xFF0B5D5B),
-        onPrimary = Color.White,
-        secondary = Color(0xFFF27D6B),
-        onSecondary = Color.White,
-        background = Color(0xFFFFF8EE),
-        surface = Color.White,
+    val colors = darkColorScheme(
+        primary = RubMint,
+        onPrimary = RubInk,
+        secondary = RubCoral,
+        onSecondary = RubInk,
+        background = RubInk,
+        surface = RubPanel,
+        onSurface = RubCream,
     )
     if (!onboardingDone) {
-        MaterialTheme(colorScheme = colors) { OnboardingScreen { setup.edit().putBoolean("onboarding_v2", true).apply(); onboardingDone = true } }
+        MaterialTheme(colorScheme = colors) { OnboardingScreen { setup.edit().putBoolean("onboarding_v201", true).apply(); onboardingDone = true } }
         return
     }
     if (currentUser == null) {
@@ -129,6 +142,32 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
     }
     if (currentUser?.email != null && !verificationPassed) {
         MaterialTheme(colorScheme = colors) { VerifyEmailScreen(authRepository, currentUser?.email.orEmpty()) { currentUser = authRepository.auth.currentUser; verificationPassed = true } }
+        return
+    }
+    var migrationReady by remember(currentUser?.uid) { mutableStateOf(false) }
+    var migrationError by remember(currentUser?.uid) { mutableStateOf<String?>(null) }
+    LaunchedEffect(currentUser?.uid) {
+        migrationReady = false
+        authRepository.ensureCleanStartV2 { error ->
+            migrationError = error
+            if (error == null) {
+                PendingSlipStore.clearUsage(context)
+                LocalSlipLinkStore.clear(context)
+                CategoryStore.clear(context)
+                migrationReady = true
+            }
+        }
+    }
+    if (!migrationReady) {
+        MaterialTheme(colorScheme = colors) {
+            Box(Modifier.fillMaxSize().background(RubInk), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    androidx.compose.foundation.Image(painterResource(R.drawable.rubjai_mascot), null, Modifier.size(132.dp))
+                    if (migrationError == null) { CircularProgressIndicator(color = RubMint); Text("กำลังเตรียมน้องรับจ่าย 2.0", color = RubCream) }
+                    else { Text(migrationError.orEmpty(), color = RubCoral); Button(onClick = { migrationError = null; authRepository.ensureCleanStartV2 { error -> migrationError = error; migrationReady = error == null } }) { Text("ลองอีกครั้ง") } }
+                }
+            }
+        }
         return
     }
     var entries by remember { mutableStateOf(emptyList<MoneyTransaction>()) }
@@ -164,7 +203,7 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
             val info = withContext(Dispatchers.IO) { runCatching { KPlusSyncManager.workInfo(context, workId) }.getOrNull() }
             when (info?.state) {
                 androidx.work.WorkInfo.State.RUNNING -> { syncing = true; syncScanned = info.progress.getInt("scanned", 0) }
-                androidx.work.WorkInfo.State.SUCCEEDED -> { syncing = false; pendingSlips = PendingSlipStore.load(context); val found = info.outputData.getInt("found", 0); message = if (found > 0) "ซิงเสร็จ พบ $found รายการ กรุณาตรวจและอนุมัติ" else "ซิงเสร็จ ไม่พบสลิป K PLUS ใหม่ของวันนี้"; syncWorkId = null; break }
+                androidx.work.WorkInfo.State.SUCCEEDED -> { syncing = false; pendingSlips = PendingSlipStore.load(context); val found = info.outputData.getInt("found", 0); message = if (found > 0) "สแกนเสร็จ พบ $found รายการ กรุณาตรวจและอนุมัติ" else "สแกนเสร็จ ไม่พบสลิปธนาคารหรือวอลเล็ตใหม่ของวันนี้"; syncWorkId = null; break }
                 androidx.work.WorkInfo.State.FAILED, androidx.work.WorkInfo.State.CANCELLED -> { syncing = false; message = "ซิงไม่สำเร็จ กรุณาตรวจสิทธิ์รูปภาพแล้วลองใหม่"; syncWorkId = null; break }
                 else -> syncing = true
             }
@@ -191,36 +230,37 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
     val startKPlusSync = { syncing = true; syncScanned = 0; syncWorkId = KPlusSyncManager.syncNow(context) }
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) startKPlusSync()
-        else message = "ต้องอนุญาตการเข้าถึงรูปจึงจะซิงสลิป K PLUS วันนี้ได้"
+        else message = "ต้องอนุญาตการเข้าถึงรูปจึงจะสแกนสลิปธนาคารและวอลเล็ตของวันนี้ได้"
     }
 
     MaterialTheme(colorScheme = colors) {
         Scaffold(
-            topBar = { RubJaiTopBar(authRepository.auth.currentUser?.displayName.orEmpty()) { showProfile = true } },
+            containerColor = RubInk,
+            topBar = { if (mainTab == 0) RubJaiTopBar(authRepository.auth.currentUser?.displayName.orEmpty()) { mainTab = 1 } },
             bottomBar = {
-                NavigationBar(containerColor = Color.White) {
+                NavigationBar(containerColor = RubCream) {
                     NavigationBarItem(mainTab == 0, { mainTab = 0 }, { Icon(Icons.Default.Home, null) }, label = { Text("หน้าหลัก") })
-                    NavigationBarItem(mainTab == 1, { mainTab = 1 }, { Icon(Icons.Default.PieChart, null) }, label = { Text("สรุป") })
-                    NavigationBarItem(mainTab == 2, { showDebts = true }, { Icon(Icons.Default.CreditCard, null) }, label = { Text("หนี้") })
-                    NavigationBarItem(mainTab == 3, { showProfile = true }, { Icon(Icons.Default.AccountCircle, null) }, label = { Text("โปรไฟล์") })
+                    NavigationBarItem(mainTab == 1, { mainTab = 1 }, { Icon(Icons.Default.AccountCircle, null) }, label = { Text("บัญชีของฉัน") })
                 }
             },
             floatingActionButton = { if (mainTab == 0) FloatingActionButton(containerColor = Color(0xFFF27D6B), onClick = { draft = DraftTransaction(type = TransactionType.INCOME, source = "manual_income", category = "รายรับ") }) { Icon(Icons.Default.Add, "เพิ่มรายรับ", tint = Color.White) } }
         ) { padding ->
             val visibleEntries = remember(entries, entryPeriod, entryKind) { entries.filterFor(entryPeriod, entryKind) }
             LazyColumn(Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp), contentPadding = PaddingValues(top = 16.dp, bottom = 104.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                item { SummaryCard(entries) }
-                if (mainTab == 0) item { HomeActions(busy, syncing, pendingSlips.size, { imagePicker.launch(arrayOf("image/*")) }, { if (!syncConsent) showSyncConsent = true else if (ContextCompat.checkSelfPermission(context, scanPermission) == PackageManager.PERMISSION_GRANTED) startKPlusSync() else permissionLauncher.launch(scanPermission) }, { pendingSlips = PendingSlipStore.load(context); showPending = true }, { draft = DraftTransaction(type = TransactionType.INCOME, source = "manual_income", category = "รายรับ") }) }
-                if (mainTab == 0) item { KPlusSyncStatus(syncing, syncScanned, syncConsent) { KPlusSyncManager.revoke(context); syncConsent = false } }
-                item { Text("รายการของคุณ", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold); EntryFilters(entryPeriod, entryKind, { entryPeriod = it }, { entryKind = it }) }
-                if (mainTab == 1 || entryPeriod != EntryPeriod.ALL) item { SpendingOverview(entries.filterFor(entryPeriod, EntryKind.EXPENSE), entryPeriod) }
-                if (visibleEntries.isEmpty()) item { Card(colors = CardDefaults.cardColors(containerColor = Color.White)) { Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) { Text("ยังไม่มีรายการในช่วงนี้", fontWeight = FontWeight.SemiBold); Text("เพิ่มรายรับด้วยปุ่ม + หรือเลือกสลิปรายจ่าย", color = Color.Gray, style = MaterialTheme.typography.bodySmall) } } }
-                items(visibleEntries, key = { it.id }) { EntryRow(it) { selectedEntry = it } }
+                if (mainTab == 0) {
+                    item { SummaryCard(entries) }
+                    item { HomeActions(busy, syncing, pendingSlips.size, { imagePicker.launch(arrayOf("image/*")) }, { if (!syncConsent) showSyncConsent = true else if (ContextCompat.checkSelfPermission(context, scanPermission) == PackageManager.PERMISSION_GRANTED) startKPlusSync() else permissionLauncher.launch(scanPermission) }, { pendingSlips = PendingSlipStore.load(context); showPending = true }, { draft = DraftTransaction(type = TransactionType.INCOME, source = "manual_income", category = "รายรับ") }) }
+                    item { KPlusSyncStatus(syncing, syncScanned, syncConsent) { KPlusSyncManager.revoke(context); syncConsent = false } }
+                    item { Text("รายการของคุณ", style = MaterialTheme.typography.titleLarge, color = RubCream, fontWeight = FontWeight.Bold); EntryFilters(entryPeriod, entryKind, { entryPeriod = it }, { entryKind = it }) }
+                    item { SpendingOverview(entries.filterFor(entryPeriod, EntryKind.EXPENSE), entryPeriod) }
+                    if (visibleEntries.isEmpty()) item { Card(colors = CardDefaults.cardColors(containerColor = RubPanel)) { Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) { Text("ยังไม่มีรายการในช่วงนี้", color = RubCream, fontWeight = FontWeight.SemiBold); Text("เพิ่มรายรับหรือเลือกสลิปรายจ่าย", color = RubMuted, style = MaterialTheme.typography.bodySmall) } } }
+                    items(visibleEntries, key = { it.id }) { EntryRow(it) { selectedEntry = it } }
+                } else item { UserHub(authRepository.auth.currentUser?.displayName.orEmpty(), entries.size, { showProfile = true }, { showDebts = true }, { mainTab = 0 }, { showSyncConsent = true }) }
             }
         }
         draft?.let { current -> TransactionDialog(current, onDismiss = { draft = null }, onSave = { saved -> busy = true; repository.add(saved, onDone = { error -> busy = false; if (error == null && saved.slipUri.isNotBlank()) LocalSlipLinkStore.put(context, TransactionRepository.documentIdFor(saved), saved.slipUri); message = error ?: "บันทึกแล้ว" }); draft = null }) }
         message?.let { AlertDialog(onDismissRequest = { message = null }, confirmButton = { TextButton(onClick = { message = null }) { Text("ตกลง") } }, text = { Text(it) }) }
-        if (showSyncConsent) AlertDialog(onDismissRequest = { showSyncConsent = false }, title = { Text("ยินยอมซิงสลิป K PLUS?") }, text = { Text("RubJai จะอ่านเฉพาะรูปที่เพิ่มในวันนี้ด้วย OCR บนเครื่อง ผลจะอยู่ในคิวรออนุมัติและยังไม่บันทึกจนกว่าคุณจะยืนยัน") }, confirmButton = { Button(onClick = { KPlusSyncManager.setConsent(context, true); syncConsent = true; showSyncConsent = false; if (ContextCompat.checkSelfPermission(context, scanPermission) == PackageManager.PERMISSION_GRANTED) startKPlusSync() else permissionLauncher.launch(scanPermission) }) { Text("ยินยอมและซิง") } }, dismissButton = { TextButton(onClick = { showSyncConsent = false }) { Text("ยังไม่ยินยอม") } })
+        if (showSyncConsent) AlertDialog(onDismissRequest = { showSyncConsent = false }, title = { Text("ยินยอมสแกนสลิปวันนี้?") }, text = { Text("RubJai จะอ่านรูปที่เพิ่มในวันนี้เพื่อหาสลิปธนาคารและวอลเล็ตด้วย OCR บนเครื่อง ผลจะอยู่ในคิวรออนุมัติและยังไม่บันทึกจนกว่าคุณจะยืนยัน") }, confirmButton = { Button(onClick = { KPlusSyncManager.setConsent(context, true); syncConsent = true; showSyncConsent = false; if (ContextCompat.checkSelfPermission(context, scanPermission) == PackageManager.PERMISSION_GRANTED) startKPlusSync() else permissionLauncher.launch(scanPermission) }) { Text("ยินยอมและสแกน") } }, dismissButton = { TextButton(onClick = { showSyncConsent = false }) { Text("ยังไม่ยินยอม") } })
         if (showPending) PendingSlipDialog(pendingSlips, onClose = { showPending = false }, onApprove = { pending -> repository.add(pending.draft) { error -> if (error == null) { if (pending.draft.slipUri.isNotBlank()) LocalSlipLinkStore.put(context, TransactionRepository.documentIdFor(pending.draft), pending.draft.slipUri); PendingSlipStore.remove(context, pending.id); pendingSlips = PendingSlipStore.load(context); message = "บันทึกรายจ่ายแล้ว" } else message = error } }, onReject = { pending -> PendingSlipStore.remove(context, pending.id); pendingSlips = PendingSlipStore.load(context); if (pendingSlips.isEmpty()) showPending = false })
         selectedEntry?.let { item -> TransactionDetailDialog(item, onDismiss = { selectedEntry = null }, onUpdate = { draftValue -> repository.update(item, draftValue) { error -> message = error ?: "แก้ไขแล้ว"; if (error == null) selectedEntry = null } }, onDelete = { repository.delete(item) { error -> message = error ?: "ลบรายการแล้ว"; if (error == null) { LocalSlipLinkStore.remove(context, item.id); selectedEntry = null } } }) }
         availableUpdate?.let { update ->
@@ -258,50 +298,106 @@ private fun OnboardingScreen(done: () -> Unit) {
     var photoGranted by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, photoPermission) == PackageManager.PERMISSION_GRANTED) }
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { photoGranted = it }
     val pages = listOf(
-        Triple("สวัสดีจากน้องรับจ่าย", "บันทึกรายรับ สแกนรายจ่าย ดูสรุป และวางแผนปลดหนี้ได้ในที่เดียว", "เริ่มรู้จักกัน"),
-        Triple("เห็นภาพรวมเงินได้ง่าย", "แยกรายรับ รายจ่าย หมวด และช่วงเวลา พร้อมแก้ไขหรือลบรายการของตัวเองได้", "ต่อไป"),
-        Triple("ข้อตกลงการใช้งาน", "RubJai ช่วยอ่านและจัดหมวดจากข้อมูลบนสลิป ผลลัพธ์อาจคลาดเคลื่อน ผู้ใช้ต้องตรวจสอบก่อนบันทึกทุกครั้ง", "ยอมรับและต่อไป"),
-        Triple("ความเป็นส่วนตัว", "รูปสลิปถูกอ่านชั่วคราวบนเครื่อง ไม่อัปโหลด ไม่คัดลอก และไม่เก็บภาพไว้ใน Firebase ระบบเก็บเฉพาะยอด วันเวลา หมวด โน้ต และรหัสกันสลิปซ้ำ", "ยอมรับและต่อไป"),
-        Triple("อนุญาตให้อ่านรูปเมื่อคุณสั่ง", "สิทธิ์รูปใช้เฉพาะตอนเลือกสลิปหรือกดสแกนวันนี้ คุณยังตรวจและอนุมัติแต่ละรายการก่อนบันทึกได้เสมอ", "ต่อไป"),
-        Triple("พร้อมเริ่มใช้งาน", "สมัครด้วยเบอร์มือถือและ OTP จากนั้นน้องรับจ่ายจะช่วยดูแลรายการของคุณ โดยข้อมูลของแต่ละบัญชีแยกจากกัน", "สมัครหรือเข้าสู่ระบบ"),
+        Triple("สวัสดี เราคือน้องรับจ่าย", "เริ่มดูแลเงินทุกวันให้เข้าใจง่ายขึ้น โดยไม่ต้องจำตัวเลขทั้งหมดเอง", "ทำความรู้จักกัน"),
+        Triple("อ่านสลิป แล้วสร้างรายการให้", "รองรับสลิปธนาคารและวอลเล็ตหลายรูปแบบ พร้อมกันสลิปซ้ำก่อนบันทึก", "ต่อไป"),
+        Triple("เห็นชัดว่าเงินไปทางไหน", "ดูรายรับ รายจ่าย และภาพรวมตามช่วงเวลา แล้วเลือกหมวดให้ตรงกับชีวิตของคุณ", "ต่อไป"),
+        Triple("ข้อตกลงที่อ่านเข้าใจได้", "น้องรับจ่ายช่วยอ่านข้อความจากสลิป ผลอาจคลาดเคลื่อนได้ คุณจึงตรวจและแก้ไขข้อมูลก่อนบันทึกได้เสมอ", "ยอมรับและต่อไป"),
+        Triple("ข้อมูลของคุณเป็นของคุณ", "รูปถูกอ่านบนเครื่องและไม่อัปโหลดไปเก็บใน Firebase เราเก็บเฉพาะข้อมูลรายการที่คุณยืนยัน", "ยอมรับและต่อไป"),
+        Triple("อนุญาตอ่านรูปเมื่อคุณสั่ง", "สิทธิ์รูปใช้ตอนเลือกสลิปหรือค้นหารูปใหม่เท่านั้น คุณยกเลิกสิทธิ์ภายหลังได้", "ต่อไป"),
+        Triple("พร้อมเริ่มแล้ว", "สมัครด้วยเบอร์มือถือและ OTP แล้วน้องรับจ่ายจะสร้างพื้นที่ข้อมูลส่วนตัวให้คุณ", "สมัครหรือเข้าสู่ระบบ"),
     )
     val current = pages[page]
-    val canContinue = when (page) { 2 -> termsAccepted; 3 -> privacyAccepted; else -> true }
-    Surface(Modifier.fillMaxSize(), color = Color(0xFFFFF3DF)) {
-        Column(Modifier.fillMaxSize().statusBarsPadding().padding(horizontal = 28.dp, vertical = 18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Spacer(Modifier.weight(.22f))
-            androidx.compose.foundation.Image(painterResource(R.drawable.rubjai_mascot), "น้องรับจ่าย", Modifier.size(if (page in 2..4) 164.dp else 220.dp), contentScale = ContentScale.Fit)
-            Spacer(Modifier.height(20.dp))
-            Text(current.first, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black, color = Color(0xFF0B5D5B))
-            Spacer(Modifier.height(12.dp))
-            Text(current.second, style = MaterialTheme.typography.bodyLarge, color = Color(0xFF456C67), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-            when (page) {
-                2 -> Row(Modifier.fillMaxWidth().padding(top = 18.dp).clickable { termsAccepted = !termsAccepted }, verticalAlignment = Alignment.CenterVertically) { Checkbox(termsAccepted, { termsAccepted = it }); Text("ฉันอ่านและยอมรับข้อตกลงการใช้งาน") }
-                3 -> Row(Modifier.fillMaxWidth().padding(top = 18.dp).clickable { privacyAccepted = !privacyAccepted }, verticalAlignment = Alignment.CenterVertically) { Checkbox(privacyAccepted, { privacyAccepted = it }); Text("ฉันเข้าใจการจัดการข้อมูลและยอมรับ") }
-                4 -> {
-                    Spacer(Modifier.height(18.dp))
-                    if (photoGranted) AssistChip(onClick = {}, label = { Text("อนุญาตสิทธิ์รูปแล้ว") }, leadingIcon = { Icon(Icons.Default.ImageSearch, null) })
-                    else OutlinedButton(onClick = { permissionLauncher.launch(photoPermission) }, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.ImageSearch, null); Spacer(Modifier.width(8.dp)); Text("เลือกสิทธิ์การเข้าถึงรูป") }
-                    Text("ข้ามได้ และระบบจะถามอีกครั้งเมื่อคุณกดใช้ฟังก์ชันสแกน", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+    val canContinue = when (page) { 3 -> termsAccepted; 4 -> privacyAccepted; else -> true }
+    Surface(Modifier.fillMaxSize(), color = RubInk) {
+        Column(Modifier.fillMaxSize().statusBarsPadding()) {
+            Crossfade(targetState = page, modifier = Modifier.weight(1f).fillMaxWidth(), animationSpec = tween(420), label = "onboarding-page") { animatedPage ->
+                val info = pages[animatedPage]
+                Column(Modifier.fillMaxSize()) {
+                    Box(Modifier.fillMaxWidth().weight(.46f).background(Brush.verticalGradient(listOf(if (animatedPage % 2 == 0) RubCoral else RubMint, RubCream))), contentAlignment = Alignment.Center) {
+                        OnboardingVisual(animatedPage)
+                        if (animatedPage > 0) IconButton(onClick = { page-- }, Modifier.align(Alignment.TopStart).padding(12.dp)) { Icon(Icons.Default.ArrowBack, "ย้อนกลับ", tint = RubInk) }
+                    }
+                    Column(Modifier.fillMaxWidth().weight(.54f).padding(horizontal = 28.dp, vertical = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(info.first, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black, color = RubCream, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                        Spacer(Modifier.height(12.dp))
+                        Text(info.second, style = MaterialTheme.typography.bodyLarge, color = RubMuted, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                        when (animatedPage) {
+                            3 -> Row(Modifier.fillMaxWidth().padding(top = 18.dp).clickable { termsAccepted = !termsAccepted }, verticalAlignment = Alignment.CenterVertically) { Checkbox(termsAccepted, { termsAccepted = it }); Text("ฉันอ่านและยอมรับข้อตกลง", color = RubCream) }
+                            4 -> Row(Modifier.fillMaxWidth().padding(top = 18.dp).clickable { privacyAccepted = !privacyAccepted }, verticalAlignment = Alignment.CenterVertically) { Checkbox(privacyAccepted, { privacyAccepted = it }); Text("ฉันเข้าใจและยอมรับการจัดการข้อมูล", color = RubCream) }
+                            5 -> OutlinedButton(onClick = { permissionLauncher.launch(photoPermission) }, Modifier.fillMaxWidth().padding(top = 18.dp), colors = ButtonDefaults.outlinedButtonColors(contentColor = RubMint)) { Icon(Icons.Default.ImageSearch, null); Spacer(Modifier.width(8.dp)); Text(if (photoGranted) "อนุญาตสิทธิ์รูปแล้ว" else "เลือกสิทธิ์การเข้าถึงรูป") }
+                        }
+                        Spacer(Modifier.weight(1f))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { repeat(pages.size) { index -> Surface(Modifier.size(if (index == page) 28.dp else 8.dp, 8.dp), RoundedCornerShape(50), color = if (index == page) RubCoral else RubMuted.copy(alpha = .45f)) {} } }
+                    }
                 }
             }
-            Spacer(Modifier.weight(.78f))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { repeat(pages.size) { index -> Surface(Modifier.size(if (index == page) 24.dp else 8.dp, 8.dp), shape = RoundedCornerShape(50), color = if (index == page) Color(0xFFF27D6B) else Color(0x9976C7B7)) {} } }
-            Spacer(Modifier.height(20.dp))
-            Button(enabled = canContinue, onClick = { if (page < pages.lastIndex) page++ else done() }, modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(28.dp)) { Text(current.third, fontWeight = FontWeight.Bold) }
-            if (page > 0) TextButton(onClick = { page-- }) { Text("ย้อนกลับ", color = Color(0xFF0B5D5B)) } else Spacer(Modifier.height(48.dp))
+            Surface(color = RubCream) {
+                Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(18.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (page > 0) TextButton(onClick = { page-- }, Modifier.weight(.35f)) { Text("ย้อนกลับ", color = RubInk, fontWeight = FontWeight.Bold) }
+                    Button(enabled = canContinue, onClick = { if (page < pages.lastIndex) page++ else done() }, Modifier.weight(1f).height(56.dp), shape = RoundedCornerShape(20.dp), colors = ButtonDefaults.buttonColors(containerColor = RubCoral, contentColor = RubInk)) { Text(current.third, fontWeight = FontWeight.Black) }
+                }
+            }
         }
     }
 }
 
 @Composable
+private fun OnboardingVisual(page: Int) {
+    Box(Modifier.fillMaxSize().padding(28.dp), contentAlignment = Alignment.Center) {
+        Surface(Modifier.size(if (page in 1..2) 230.dp else 190.dp), RoundedCornerShape(40.dp), color = RubInk.copy(alpha = .92f), shadowElevation = 14.dp) {
+            Box(contentAlignment = Alignment.Center) {
+                when (page) {
+                    1, 5 -> Icon(Icons.Default.ReceiptLong, null, Modifier.size(112.dp), tint = RubMint)
+                    2 -> Icon(Icons.Default.PieChart, null, Modifier.size(112.dp), tint = RubCoral)
+                    3, 4 -> Icon(Icons.Default.CreditCard, null, Modifier.size(112.dp), tint = RubCream)
+                    else -> androidx.compose.foundation.Image(painterResource(R.drawable.rubjai_mascot), "น้องรับจ่าย", Modifier.size(160.dp), contentScale = ContentScale.Fit)
+                }
+            }
+        }
+        if (page != 0) androidx.compose.foundation.Image(painterResource(R.drawable.rubjai_mascot), null, Modifier.align(Alignment.BottomEnd).size(108.dp), contentScale = ContentScale.Fit)
+    }
+}
+
+@Composable
 private fun RubJaiTopBar(name: String, profile: () -> Unit) {
-    Surface(color = Color(0xFFFFF3DF)) {
+    Surface(color = RubCoral) {
         Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             androidx.compose.foundation.Image(painterResource(R.drawable.rubjai_mascot), null, Modifier.size(44.dp), contentScale = ContentScale.Crop)
             Spacer(Modifier.width(10.dp))
-            Column { Text("RubJai", color = Color(0xFF0B5D5B), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black); Text(if (name.isBlank()) "น้องรับจ่ายพร้อมช่วยแล้ว" else "สวัสดี $name", style = MaterialTheme.typography.bodySmall, color = Color(0xFF456C67)) }
-            Spacer(Modifier.weight(1f)); IconButton(onClick = profile) { Icon(Icons.Default.AccountCircle, "โปรไฟล์", tint = Color(0xFF0B5D5B)) }
+            Column { Text("น้องรับจ่าย", color = RubInk, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black); Text(if (name.isBlank()) "พร้อมช่วยดูแลเงินแล้ว" else "สวัสดี $name", style = MaterialTheme.typography.bodySmall, color = RubInk.copy(alpha = .75f)) }
+            Spacer(Modifier.weight(1f)); IconButton(onClick = profile) { Icon(Icons.Default.AccountCircle, "บัญชีของฉัน", tint = RubInk) }
+        }
+    }
+}
+
+@Composable
+private fun UserHub(name: String, entryCount: Int, editProfile: () -> Unit, debts: () -> Unit, home: () -> Unit, permission: () -> Unit) {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Box(Modifier.fillMaxWidth().height(250.dp).background(Brush.verticalGradient(listOf(RubCoral, RubCream)), RoundedCornerShape(28.dp))) {
+            Column(Modifier.padding(24.dp)) {
+                Text("สวัสดี ${name.ifBlank { "คุณ" }}", color = RubInk, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black)
+                Text("ข้อมูลและการตั้งค่าของคุณ", color = RubInk.copy(alpha = .72f))
+            }
+            androidx.compose.foundation.Image(painterResource(R.drawable.rubjai_mascot), null, Modifier.align(Alignment.BottomEnd).padding(12.dp).size(150.dp))
+        }
+        Card(colors = CardDefaults.cardColors(containerColor = RubPanel), shape = RoundedCornerShape(24.dp)) {
+            Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("ภาพรวมบัญชี", color = RubCream, fontWeight = FontWeight.Bold)
+                Text("$entryCount รายการที่บันทึกไว้", color = RubMint, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black)
+            }
+        }
+        UserHubRow(Icons.Default.AccountCircle, "ข้อมูลส่วนตัวและบัญชี", editProfile)
+        UserHubRow(Icons.Default.ImageSearch, "สิทธิ์อ่านรูปและการสแกน", permission)
+        UserHubRow(Icons.Default.CreditCard, "แผนปลดหนี้", debts)
+        UserHubRow(Icons.Default.Home, "กลับไปดูรายการ", home)
+    }
+}
+
+@Composable
+private fun UserHubRow(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, action: () -> Unit) {
+    Card(Modifier.fillMaxWidth().clickable(onClick = action), colors = CardDefaults.cardColors(containerColor = RubPanel), shape = RoundedCornerShape(20.dp)) {
+        Row(Modifier.fillMaxWidth().padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, null, tint = RubMint, modifier = Modifier.size(30.dp)); Spacer(Modifier.width(16.dp)); Text(title, Modifier.weight(1f), color = RubCream, fontWeight = FontWeight.SemiBold); Text("›", color = RubCoral, style = MaterialTheme.typography.headlineSmall)
         }
     }
 }
@@ -312,7 +408,7 @@ private fun HomeActions(busy: Boolean, syncing: Boolean, pending: Int, scan: () 
         Button(onClick = scan, enabled = !busy, modifier = Modifier.fillMaxWidth().height(54.dp), shape = RoundedCornerShape(18.dp)) { Icon(Icons.Default.ImageSearch, null); Spacer(Modifier.width(8.dp)); Text(if (busy) "กำลังอ่านสลิป…" else "เลือกสลิปรายจ่าย") }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             OutlinedButton(onClick = income, modifier = Modifier.weight(1f)) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(4.dp)); Text("เพิ่มรายรับ") }
-            OutlinedButton(onClick = sync, enabled = !syncing, modifier = Modifier.weight(1f)) { Icon(Icons.Default.ReceiptLong, null); Spacer(Modifier.width(4.dp)); Text(if (syncing) "กำลังสแกน" else "สแกนวันนี้") }
+            OutlinedButton(onClick = sync, enabled = !syncing, modifier = Modifier.weight(1f)) { Icon(Icons.Default.ReceiptLong, null); Spacer(Modifier.width(4.dp)); Text(if (syncing) "กำลังสแกน" else "สแกนสลิปวันนี้") }
         }
         if (pending > 0) Button(onClick = review, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF27D6B), contentColor = Color.White), modifier = Modifier.fillMaxWidth()) { Text("ตรวจรายการรออนุมัติ $pending รายการ", fontWeight = FontWeight.Bold) }
     }
@@ -323,7 +419,7 @@ private fun KPlusSyncStatus(syncing: Boolean, scanned: Int, consented: Boolean, 
     if (!syncing && !consented) return
     Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F1FF))) {
         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            if (syncing) { Text("น้องรับจ่ายกำลังตรวจรูปวันนี้", fontWeight = FontWeight.Bold); LinearProgressIndicator(Modifier.fillMaxWidth()); Text(if (scanned == 0) "กำลังเตรียมรูป…" else "ตรวจแล้ว $scanned รูป • ยังไม่บันทึกรายการ", style = MaterialTheme.typography.bodySmall) }
+            if (syncing) { Text("น้องรับจ่ายกำลังหาสลิปธนาคาร/วอลเล็ต", fontWeight = FontWeight.Bold); LinearProgressIndicator(Modifier.fillMaxWidth()); Text(if (scanned == 0) "กำลังเตรียมรูป…" else "ตรวจแล้ว $scanned รูป • ยังไม่บันทึกรายการ", style = MaterialTheme.typography.bodySmall) }
             else Row(verticalAlignment = Alignment.CenterVertically) { Text("อนุญาตสแกนเมื่อคุณกดเท่านั้น", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall); TextButton(onClick = revoke) { Text("ยกเลิกสิทธิ์") } }
         }
     }
@@ -467,32 +563,40 @@ private fun AuthScreen(repository: AuthRepository) {
     var phone by remember { mutableStateOf("") }; var name by remember { mutableStateOf("") }; var otp by remember { mutableStateOf("") }
     var verificationId by remember { mutableStateOf<String?>(null) }; var busy by remember { mutableStateOf(false) }; var error by remember { mutableStateOf<String?>(null) }
     val finishCredential: (PhoneAuthCredential) -> Unit = { credential -> busy = true; repository.signInWithPhoneCredential(credential, name) { busy = false; error = it } }
-    Surface(Modifier.fillMaxSize(), color = Color(0xFFFFF3DF)) {
-        Column(Modifier.fillMaxSize().statusBarsPadding().padding(24.dp).verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
+    Surface(Modifier.fillMaxSize(), color = RubInk) {
+        Column(Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(Modifier.fillMaxWidth().height(280.dp).background(Brush.verticalGradient(listOf(RubCoral, RubCream))), contentAlignment = Alignment.BottomCenter) {
+                androidx.compose.foundation.Image(painterResource(R.drawable.rubjai_mascot), null, Modifier.size(190.dp), contentScale = ContentScale.Fit)
+            }
+            Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Spacer(Modifier.height(24.dp))
-            androidx.compose.foundation.Image(painterResource(R.drawable.rubjai_mascot), null, Modifier.size(152.dp), contentScale = ContentScale.Fit)
-            Text("RubJai", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Black, color = Color(0xFF0B5D5B))
-            Text("น้องรับจ่ายช่วยดูแลเงินของคุณ", color = Color(0xFF456C67))
+            Text("น้องรับจ่าย", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Black, color = RubCream)
+            Text("เริ่มดูแลรายการของคุณอย่างเป็นส่วนตัว", color = RubMuted)
             Spacer(Modifier.height(24.dp))
-            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(28.dp)) {
+            Card(colors = CardDefaults.cardColors(containerColor = RubPanel), shape = RoundedCornerShape(28.dp)) {
                 Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(if (verificationId == null) "สมัครหรือเข้าสู่ระบบด้วยเบอร์มือถือ" else "ใส่ OTP 6 หลัก", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    if (verificationId == null) {
+                    Crossfade(verificationId == null, animationSpec = tween(360), label = "otp-step") { phoneStep ->
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(if (phoneStep) "สมัครหรือเข้าสู่ระบบ" else "ใส่ OTP 6 หลัก", color = RubCream, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    if (phoneStep) {
                             OutlinedTextField(name, { name = it.take(100) }, label = { Text("ชื่อที่แสดง") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                             OutlinedTextField(phone, { phone = it.filter(Char::isDigit).take(10) }, label = { Text("เบอร์มือถือ 10 หลัก") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                            Text("ระบบจะส่งรหัส OTP ทาง SMS เบอร์เดิมใช้เข้าสู่ระบบครั้งต่อไปได้", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                            Button(enabled = !busy && name.isNotBlank() && phone.length == 10, modifier = Modifier.fillMaxWidth(), onClick = {
+                            Text("ระบบจะส่งรหัสทาง SMS เพื่อยืนยันว่าเป็นเบอร์ของคุณ", style = MaterialTheme.typography.bodySmall, color = RubMuted)
+                            Button(enabled = !busy && name.isNotBlank() && phone.length == 10, colors = ButtonDefaults.buttonColors(containerColor = RubCoral, contentColor = RubInk), modifier = Modifier.fillMaxWidth().height(54.dp), onClick = {
                                 busy = true; error = null
                                 repository.requestPhoneOtp(activity, phone, { id, _ -> verificationId = id; busy = false }, finishCredential, { error = it; busy = false })
                             }) { Text(if (busy) "กำลังส่ง…" else "รับรหัส OTP") }
                     } else {
-                            Text("ส่งรหัสไปที่ $phone แล้ว", color = Color.Gray)
+                            Text("ส่งรหัสไปที่ $phone แล้ว", color = RubMuted)
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) { repeat(6) { index -> Surface(Modifier.weight(1f).aspectRatio(1f), RoundedCornerShape(12.dp), color = RubInk) { Box(contentAlignment = Alignment.Center) { Text(otp.getOrNull(index)?.toString().orEmpty(), color = RubMint, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black) } } } }
                             OutlinedTextField(otp, { otp = it.filter(Char::isDigit).take(6) }, label = { Text("รหัส OTP") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                            Button(enabled = !busy && otp.length == 6, modifier = Modifier.fillMaxWidth(), onClick = { busy = true; repository.confirmPhoneOtp(verificationId!!, otp, name) { busy = false; error = it } }) { Text(if (busy) "กำลังตรวจ…" else "ยืนยันและเข้าใช้งาน") }
+                            Button(enabled = !busy && otp.length == 6, colors = ButtonDefaults.buttonColors(containerColor = RubMint, contentColor = RubInk), modifier = Modifier.fillMaxWidth().height(54.dp), onClick = { busy = true; repository.confirmPhoneOtp(verificationId!!, otp, name) { busy = false; error = it } }) { Text(if (busy) "กำลังตรวจ…" else "ยืนยันและเข้าใช้งาน") }
                             TextButton(onClick = { verificationId = null; otp = ""; error = null }) { Text("เปลี่ยนเบอร์มือถือ") }
                     }
                     error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                    }}
                 }
+            }
             }
         }
     }
@@ -553,29 +657,16 @@ private fun CategoryManagerDialog(close: () -> Unit) {
 private fun SummaryCard(entries: List<MoneyTransaction>) {
     val income = entries.filter { it.type == "INCOME" }.sumOf { it.amount }
     val expense = entries.filter { it.type == "EXPENSE" }.sumOf { it.amount }
-    Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF0B5D5B))) {
+    Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = RubPanel)) {
         Column(Modifier.fillMaxWidth().padding(22.dp)) {
-            Text("คงเหลือ", color = Color(0xFFB9C8E5)); Text(money(income - expense), color = Color.White, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(16.dp)); Row { Text("รับ  ${money(income)}", color = Color(0xFF43E1A4)); Spacer(Modifier.weight(1f)); Text("จ่าย  ${money(expense)}", color = Color(0xFFFF8A78)) }
-        }
-    }
-}
-
-@Composable private fun KPlusSyncCard(consented: Boolean, pendingCount: Int, syncing: Boolean, scanned: Int, onSync: () -> Unit, onRevoke: () -> Unit, onReview: () -> Unit) {
-    Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F7F2))) {
-        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("ซิงสลิป K PLUS วันนี้", fontWeight = FontWeight.Bold)
-            Text("กดเมื่อต้องการตรวจรูปของวันนี้ ผลจะรอคุณอนุมัติ", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-            Button(onClick = onSync, enabled = !syncing, modifier = Modifier.fillMaxWidth().semantics { contentDescription = "ซิงสลิป K PLUS ของวันนี้ทันที" }) { Text(if (syncing) "กำลังซิง…" else "ซิงวันนี้") }
-            if (syncing) { LinearProgressIndicator(Modifier.fillMaxWidth()); Text(if (scanned > 0) "ตรวจแล้ว $scanned รูป" else "กำลังเตรียมตรวจรูป…", style = MaterialTheme.typography.bodySmall, color = Color.Gray) }
-            if (pendingCount > 0) Button(onClick = onReview, modifier = Modifier.fillMaxWidth()) { Text("ตรวจรายการรออนุมัติ $pendingCount รายการ") }
-            if (consented) TextButton(onClick = onRevoke, modifier = Modifier.align(Alignment.End)) { Text("ยกเลิกความยินยอม") }
+            Text("คงเหลือ", color = RubMuted); Text(money(income - expense), color = RubCream, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(16.dp)); Row { Text("รับ  ${money(income)}", color = RubMint); Spacer(Modifier.weight(1f)); Text("จ่าย  ${money(expense)}", color = RubCoral) }
         }
     }
 }
 
 @Composable private fun PendingSlipDialog(items: List<PendingSlip>, onClose: () -> Unit, onApprove: (PendingSlip) -> Unit, onReject: (PendingSlip) -> Unit) {
-    AlertDialog(onDismissRequest = onClose, title = { Text("รายการ K PLUS รออนุมัติ") }, text = {
+    AlertDialog(onDismissRequest = onClose, title = { Text("สลิปธนาคาร/วอลเล็ตที่รออนุมัติ") }, text = {
         if (items.isEmpty()) Text("ไม่มีรายการรอตรวจ") else LazyColumn(Modifier.fillMaxWidth().heightIn(max = 460.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             items(items, key = { it.id }) { pending ->
                 Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFF4F7FA))) {

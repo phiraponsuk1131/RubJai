@@ -17,16 +17,21 @@ object SlipParser {
     private val remarkPattern = Regex("(?:remark|note|memo|หมายเหตุ|บันทึกช่วยจำ)\\s*[:：-]?\\s*([^\\n]{2,120})", RegexOption.IGNORE_CASE)
     private val mrDiyPattern = Regex("(?i)MR\\s*[.\\-]?\\s*D\\s*[.\\-]?\\s*I\\s*[.\\-]?\\s*Y\\s*[.\\-]?[A-Z0-9.\\-]*")
     private val maskedAccountPattern = Regex("(?i)[x*]{2,}[^\\n]{0,20}[0-9]{3,4}[^\\n]{0,10}[x*]")
+    private val recipientLabelPattern = Regex("(?i)^(?:ผู้รับ|ชื่อผู้รับ|ไปยัง|บัญชีปลายทาง|ชื่อบัญชี|receiver|recipient|to)\\s*[:：-]?\\s*(.*)$")
+    private val recipientStopWords = listOf(
+        "สำเร็จ", "successful", "จากบัญชี", "ผู้โอน", "ผู้ส่ง", "sender", "เลขที่รายการ",
+        "reference", "จำนวน", "amount", "ค่าธรรมเนียม", "fee", "ธนาคาร", "bank",
+    )
     fun parse(text: String, source: String, imageDate: Date? = null): DraftTransaction {
         val labeledAmount = amountPatterns.firstNotNullOfOrNull { it.find(text)?.groupValues?.getOrNull(1) }?.replace(",", "")
         val fallbackAmounts = decimalAmount.findAll(text).mapNotNull { it.groupValues[1].replace(",", "").toDoubleOrNull() }.filter { it > 0.0 }.toList()
         val amount = labeledAmount ?: fallbackAmounts.firstOrNull()?.let { "%.2f".format(Locale.US, it) }.orEmpty()
         val lines = text.lineSequence().map(String::trim).filter(String::isNotBlank).toList()
         val recognizedMrDiy = mrDiyPattern.find(text)?.value?.replace(Regex("\\s+"), "")
-        val recipient = findKPlusRecipient(lines)
+        val recipient = findRecipient(lines)
         val merchant = recognizedMrDiy ?: recipient ?: lines.firstOrNull { line ->
             line.length in 3..100 && listOf("SHOP", "MR.D.I.Y", "MINOR", "LIMITED", "CO.,LTD", "COMPANY").any { line.contains(it, true) }
-        } ?: lines.firstOrNull { it.length in 3..80 && !it.any(Char::isDigit) && !it.contains(":") && !it.contains("สำเร็จ") }.orEmpty()
+        }.orEmpty()
         val remark = remarkPattern.find(text)?.groupValues?.getOrNull(1)?.trim().orEmpty()
         val category = "ยังไม่จัดหมวด"
         val rawDate = datePattern.find(text)?.value ?: thaiSlipDatePattern.find(text)?.groupValues?.getOrNull(1)?.replace(Regex("\\s+"), " ")?.trim().orEmpty()
@@ -35,15 +40,41 @@ object SlipParser {
         return DraftTransaction(amount, merchant.ifBlank { category }, TransactionType.EXPENSE, source, text, category, remark, listOf(date, time).filter(String::isNotBlank).joinToString(" "))
     }
 
-    private fun findKPlusRecipient(lines: List<String>): String? {
+    private fun findRecipient(lines: List<String>): String? {
+        lines.forEachIndexed { index, line ->
+            val match = recipientLabelPattern.find(line) ?: return@forEachIndexed
+            val inline = match.groupValues.getOrNull(1).orEmpty().trim()
+            if (isRecipientCandidate(inline)) return inline
+            lines.drop(index + 1).take(4).firstOrNull(::isRecipientCandidate)?.let { return it }
+        }
+
+        val directionIndex = lines.indexOfFirst { line ->
+            line == "↓" || line == "→" || line.contains("โอนไป", true) || line.contains("ไปยัง", true)
+        }
+        if (directionIndex >= 0) {
+            lines.drop(directionIndex + 1).take(6).firstOrNull(::isRecipientCandidate)?.let { return it }
+        }
+
         val accountIndexes = lines.indices.filter { maskedAccountPattern.containsMatchIn(lines[it]) }
-        val recipientAccountIndex = accountIndexes.getOrNull(1) ?: accountIndexes.lastOrNull() ?: return null
+        val recipientAccountIndex = accountIndexes.getOrNull(1) ?: return null
         val candidate = (recipientAccountIndex - 1 downTo (recipientAccountIndex - 4).coerceAtLeast(0)).map { lines[it] }.firstOrNull { line ->
-            line.length in 3..100 && !line.contains("กสิกร", true) && !line.contains("KBank", true) && !line.contains("สำเร็จ") && !maskedAccountPattern.containsMatchIn(line) && line.count(Char::isDigit) < 5
+            isRecipientCandidate(line)
         }
         if (!candidate.isNullOrBlank()) return candidate
         val ending = Regex("[0-9]{3,4}").find(lines[recipientAccountIndex])?.value
         return ending?.let { "โอนไปบัญชีลงท้าย $it" }
+    }
+
+    private fun isRecipientCandidate(line: String): Boolean {
+        val value = line.trim()
+        return value.length in 3..100 &&
+            value.count(Char::isDigit) < 5 &&
+            !maskedAccountPattern.containsMatchIn(value) &&
+            recipientStopWords.none { value.contains(it, true) } &&
+            !value.equals("K+", true) &&
+            !value.equals("K PLUS", true) &&
+            !value.contains("SCB EASY", true) &&
+            !value.contains("Krungthai NEXT", true)
     }
 
     private fun normalizeDate(raw: String, imageDate: Date?): String {

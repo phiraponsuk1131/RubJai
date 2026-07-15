@@ -10,6 +10,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.android.gms.tasks.Task
 import com.google.android.gms.tasks.Tasks
 import com.google.firebase.firestore.QuerySnapshot
+import com.google.firebase.firestore.SetOptions
 import java.util.concurrent.TimeUnit
 
 class AuthRepository {
@@ -65,7 +66,7 @@ class AuthRepository {
             val profileTask = if (name.isNotBlank()) user.updateProfile(UserProfileChangeRequest.Builder().setDisplayName(name).build()) else null
             val save = {
                 if (name.isBlank()) done(null) else db.collection("users").document(user.uid)
-                    .set(mapOf("displayName" to name, "phone" to user.phoneNumber.orEmpty().take(30)))
+                    .set(mapOf("displayName" to name, "phone" to user.phoneNumber.orEmpty().take(30)), SetOptions.merge())
                     .addOnSuccessListener { done(null) }.addOnFailureListener { done(it.localizedMessage) }
             }
             profileTask?.addOnSuccessListener { save() }?.addOnFailureListener { done(it.localizedMessage) } ?: save()
@@ -91,7 +92,7 @@ class AuthRepository {
     fun updateProfile(name: String, phone: String, done: (String?) -> Unit) {
         val user = auth.currentUser ?: return done("ยังไม่ได้เข้าสู่ระบบ")
         user.updateProfile(UserProfileChangeRequest.Builder().setDisplayName(name.trim()).build()).addOnSuccessListener {
-            db.collection("users").document(user.uid).set(mapOf("displayName" to name.trim().take(100), "phone" to phone.trim().take(30)))
+            db.collection("users").document(user.uid).set(mapOf("displayName" to name.trim().take(100), "phone" to phone.trim().take(30)), SetOptions.merge())
                 .addOnSuccessListener { done(null) }.addOnFailureListener { done(it.localizedMessage) }
         }.addOnFailureListener { done(it.localizedMessage) }
     }
@@ -102,6 +103,20 @@ class AuthRepository {
     }
 
     fun signOut() = auth.signOut()
+
+    fun ensureCleanStartV2(done: (String?) -> Unit) {
+        val user = auth.currentUser ?: return done("ไม่พบบัญชี")
+        val root = db.collection("users").document(user.uid)
+        root.get().addOnSuccessListener { snapshot ->
+            if ((snapshot.getLong("dataVersion") ?: 0L) >= 2L) return@addOnSuccessListener done(null)
+            clearUsageData { error ->
+                if (error != null) return@clearUsageData done(error)
+                root.set(mapOf("dataVersion" to 2L), SetOptions.merge())
+                    .addOnSuccessListener { done(null) }
+                    .addOnFailureListener { done(it.localizedMessage ?: "เตรียมข้อมูลเวอร์ชันใหม่ไม่สำเร็จ") }
+            }
+        }.addOnFailureListener { done(it.localizedMessage ?: "ตรวจเวอร์ชันข้อมูลไม่สำเร็จ") }
+    }
 
     fun clearUsageData(done: (String?) -> Unit) {
         val user = auth.currentUser ?: return done("ไม่พบบัญชี")

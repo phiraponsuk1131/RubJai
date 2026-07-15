@@ -50,7 +50,7 @@ object PendingSlipStore {
     @Synchronized fun clearUsage(context: Context) { prefs(context).edit().remove(PENDING).remove(PROCESSED).apply() }
     private fun save(context: Context, items: List<PendingSlip>) { prefs(context).edit().putString(PENDING, JSONArray(items.map { it.toJson() }).toString()).apply() }
     private fun PendingSlip.toJson() = JSONObject().put("id", id).put("amount", draft.amount).put("title", draft.title).put("rawText", draft.rawText.take(3000)).put("category", draft.category).put("remark", draft.remark).put("occurredAt", draft.occurredAt).put("slipUri", draft.slipUri)
-    private fun JSONObject.toPendingSlip() = PendingSlip(getString("id"), DraftTransaction(optString("amount"), optString("title"), TransactionType.EXPENSE, "auto_kplus", optString("rawText"), optString("category", "ใช้จ่ายทั่วไป"), optString("remark"), optString("occurredAt"), slipUri = optString("slipUri")))
+    private fun JSONObject.toPendingSlip() = PendingSlip(getString("id"), DraftTransaction(optString("amount"), optString("title"), TransactionType.EXPENSE, "auto_bank_slip", optString("rawText"), optString("category", "ยังไม่จัดหมวด"), optString("remark"), optString("occurredAt"), slipUri = optString("slipUri")))
 }
 
 object KPlusSyncManager {
@@ -69,6 +69,12 @@ object KPlusSyncManager {
 
 class KPlusScanWorker(context: Context, params: WorkerParameters) : Worker(context, params) {
     private val kPlusReference = Regex("[0-9]{10,}(?:CPM|DQR|DTF)[0-9]+", RegexOption.IGNORE_CASE)
+    private val genericReference = Regex("(?i)(?:เลขที่รายการ|reference|transaction id|รหัสอ้างอิง)[^\\n]{0,50}[A-Z0-9-]{6,}")
+    private val supportedApps = listOf(
+        "K+", "K PLUS", "SCB EASY", "Krungthai NEXT", "เป๋าตัง", "ttb touch",
+        "Krungsri", "KMA", "Bualuang", "Bangkok Bank", "CIMB", "UOB",
+        "TrueMoney", "G-Wallet", "MAKE by KBank", "MyMo", "ออมสิน",
+    )
 
     override fun doWork(): Result {
         if (!KPlusSyncManager.hasConsent(applicationContext)) return Result.success()
@@ -96,8 +102,11 @@ class KPlusScanWorker(context: Context, params: WorkerParameters) : Worker(conte
                     val imageDate = Date(it.getLong(dateColumn) * 1000)
                     runCatching {
                         val text = Tasks.await(recognizer.process(InputImage.fromFilePath(applicationContext, uri))).text
-                        val isKPlus = text.contains("K+", true) || kPlusReference.containsMatchIn(text)
-                        val draft = if (isKPlus) SlipParser.parse(text, "auto_kplus", imageDate).copy(slipUri = uri.toString()) else null
+                        val looksLikeSlip = supportedApps.any { text.contains(it, true) } || kPlusReference.containsMatchIn(text) || genericReference.containsMatchIn(text) ||
+                            ((text.contains("สำเร็จ") || text.contains("successful", true)) &&
+                                (text.contains("จำนวน") || text.contains("amount", true)) &&
+                                (text.contains("บาท") || text.contains("THB", true)))
+                        val draft = if (looksLikeSlip) SlipParser.parse(text, "auto_bank_slip", imageDate).copy(slipUri = uri.toString()) else null
                         if (draft?.amount?.toDoubleOrNull()?.let { value -> value > 0 } == true) { PendingSlipStore.add(applicationContext, mediaKey, draft); found++ }
                         else PendingSlipStore.markProcessed(applicationContext, mediaKey)
                     }

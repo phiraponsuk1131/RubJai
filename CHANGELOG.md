@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.0.1
+
+- Replaced the mascot logo's two-tone frame with one continuous solid emerald-green background while preserving the bear and wallet artwork.
+
 ## 2.0.0
 
 - Rebuilt onboarding as an original RubJai flow covering features, terms, privacy, photo permission, approval, and phone sign-in.
