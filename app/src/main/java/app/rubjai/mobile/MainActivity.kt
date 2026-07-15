@@ -5,6 +5,7 @@ import android.app.Activity
 import android.content.Intent
 import android.content.Context
 import android.content.pm.PackageManager
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
 import android.provider.MediaStore
@@ -39,6 +40,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -86,6 +88,7 @@ data class DraftTransaction(
     val remark: String = "",
     val occurredAt: String = "",
     val slipFingerprint: String = "",
+    val slipUri: String = "",
 )
 
 enum class TransactionType { INCOME, EXPENSE }
@@ -169,17 +172,19 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
         }
     }
 
-    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null) {
             busy = true
+            runCatching { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
             val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
             recognizer.process(InputImage.fromFilePath(context, uri))
                 .addOnSuccessListener { result ->
                     val parsed = SlipParser.parse(result.text, "slip_ocr", imageDate(context, uri))
-                    if (parsed.amount.toDoubleOrNull()?.let { it > 0 } == true) draft = parsed else message = "อ่านยอดจากรูปไม่พบ กรุณาเลือกภาพสลิปที่ชัดเจน"
+                    if (parsed.amount.toDoubleOrNull()?.let { it > 0 } == true) draft = parsed.copy(slipUri = uri.toString()) else message = "อ่านยอดจากรูปไม่พบ กรุณาเลือกภาพสลิปที่ชัดเจน"
                     busy = false
+                    recognizer.close()
                 }
-                .addOnFailureListener { error -> message = "อ่านสลิปไม่สำเร็จ: ${error.localizedMessage}"; busy = false }
+                .addOnFailureListener { error -> message = "อ่านสลิปไม่สำเร็จ: ${error.localizedMessage}"; busy = false; recognizer.close() }
         }
     }
     val scanPermission = if (android.os.Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_IMAGES else Manifest.permission.READ_EXTERNAL_STORAGE
@@ -205,7 +210,7 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
             val visibleEntries = remember(entries, entryPeriod, entryKind) { entries.filterFor(entryPeriod, entryKind) }
             LazyColumn(Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp), contentPadding = PaddingValues(top = 16.dp, bottom = 104.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 item { SummaryCard(entries) }
-                if (mainTab == 0) item { HomeActions(busy, syncing, pendingSlips.size, { imagePicker.launch("image/*") }, { if (!syncConsent) showSyncConsent = true else if (ContextCompat.checkSelfPermission(context, scanPermission) == PackageManager.PERMISSION_GRANTED) startKPlusSync() else permissionLauncher.launch(scanPermission) }, { pendingSlips = PendingSlipStore.load(context); showPending = true }, { draft = DraftTransaction(type = TransactionType.INCOME, source = "manual_income", category = "รายรับ") }) }
+                if (mainTab == 0) item { HomeActions(busy, syncing, pendingSlips.size, { imagePicker.launch(arrayOf("image/*")) }, { if (!syncConsent) showSyncConsent = true else if (ContextCompat.checkSelfPermission(context, scanPermission) == PackageManager.PERMISSION_GRANTED) startKPlusSync() else permissionLauncher.launch(scanPermission) }, { pendingSlips = PendingSlipStore.load(context); showPending = true }, { draft = DraftTransaction(type = TransactionType.INCOME, source = "manual_income", category = "รายรับ") }) }
                 if (mainTab == 0) item { KPlusSyncStatus(syncing, syncScanned, syncConsent) { KPlusSyncManager.revoke(context); syncConsent = false } }
                 item { Text("รายการของคุณ", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold); EntryFilters(entryPeriod, entryKind, { entryPeriod = it }, { entryKind = it }) }
                 if (mainTab == 1 || entryPeriod != EntryPeriod.ALL) item { SpendingOverview(entries.filterFor(entryPeriod, EntryKind.EXPENSE), entryPeriod) }
@@ -213,11 +218,11 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
                 items(visibleEntries, key = { it.id }) { EntryRow(it) { selectedEntry = it } }
             }
         }
-        draft?.let { current -> TransactionDialog(current, onDismiss = { draft = null }, onSave = { busy = true; repository.add(it, onDone = { error -> busy = false; message = error ?: "บันทึกแล้ว" }); draft = null }) }
+        draft?.let { current -> TransactionDialog(current, onDismiss = { draft = null }, onSave = { saved -> busy = true; repository.add(saved, onDone = { error -> busy = false; if (error == null && saved.slipUri.isNotBlank()) LocalSlipLinkStore.put(context, TransactionRepository.documentIdFor(saved), saved.slipUri); message = error ?: "บันทึกแล้ว" }); draft = null }) }
         message?.let { AlertDialog(onDismissRequest = { message = null }, confirmButton = { TextButton(onClick = { message = null }) { Text("ตกลง") } }, text = { Text(it) }) }
         if (showSyncConsent) AlertDialog(onDismissRequest = { showSyncConsent = false }, title = { Text("ยินยอมซิงสลิป K PLUS?") }, text = { Text("RubJai จะอ่านเฉพาะรูปที่เพิ่มในวันนี้ด้วย OCR บนเครื่อง ผลจะอยู่ในคิวรออนุมัติและยังไม่บันทึกจนกว่าคุณจะยืนยัน") }, confirmButton = { Button(onClick = { KPlusSyncManager.setConsent(context, true); syncConsent = true; showSyncConsent = false; if (ContextCompat.checkSelfPermission(context, scanPermission) == PackageManager.PERMISSION_GRANTED) startKPlusSync() else permissionLauncher.launch(scanPermission) }) { Text("ยินยอมและซิง") } }, dismissButton = { TextButton(onClick = { showSyncConsent = false }) { Text("ยังไม่ยินยอม") } })
-        if (showPending) PendingSlipDialog(pendingSlips, onClose = { showPending = false }, onApprove = { pending -> repository.add(pending.draft) { error -> if (error == null) { PendingSlipStore.remove(context, pending.id); pendingSlips = PendingSlipStore.load(context); message = "บันทึกรายจ่ายแล้ว" } else message = error } }, onReject = { pending -> PendingSlipStore.remove(context, pending.id); pendingSlips = PendingSlipStore.load(context); if (pendingSlips.isEmpty()) showPending = false })
-        selectedEntry?.let { item -> TransactionDetailDialog(item, onDismiss = { selectedEntry = null }, onUpdate = { draftValue -> repository.update(item, draftValue) { error -> message = error ?: "แก้ไขแล้ว"; if (error == null) selectedEntry = null } }, onDelete = { repository.delete(item) { error -> message = error ?: "ลบรายการแล้ว"; if (error == null) selectedEntry = null } }) }
+        if (showPending) PendingSlipDialog(pendingSlips, onClose = { showPending = false }, onApprove = { pending -> repository.add(pending.draft) { error -> if (error == null) { if (pending.draft.slipUri.isNotBlank()) LocalSlipLinkStore.put(context, TransactionRepository.documentIdFor(pending.draft), pending.draft.slipUri); PendingSlipStore.remove(context, pending.id); pendingSlips = PendingSlipStore.load(context); message = "บันทึกรายจ่ายแล้ว" } else message = error } }, onReject = { pending -> PendingSlipStore.remove(context, pending.id); pendingSlips = PendingSlipStore.load(context); if (pendingSlips.isEmpty()) showPending = false })
+        selectedEntry?.let { item -> TransactionDetailDialog(item, onDismiss = { selectedEntry = null }, onUpdate = { draftValue -> repository.update(item, draftValue) { error -> message = error ?: "แก้ไขแล้ว"; if (error == null) selectedEntry = null } }, onDelete = { repository.delete(item) { error -> message = error ?: "ลบรายการแล้ว"; if (error == null) { LocalSlipLinkStore.remove(context, item.id); selectedEntry = null } } }) }
         availableUpdate?.let { update ->
             AlertDialog(
                 onDismissRequest = { if (updateProgress == null) availableUpdate = null },
@@ -326,24 +331,79 @@ private fun KPlusSyncStatus(syncing: Boolean, scanned: Int, consented: Boolean, 
 
 @Composable
 private fun TransactionDetailDialog(item: MoneyTransaction, onDismiss: () -> Unit, onUpdate: (DraftTransaction) -> Unit, onDelete: () -> Unit) {
+    val context = LocalContext.current
     var amount by remember(item.id) { mutableStateOf(item.amount.toString()) }
     var title by remember(item.id) { mutableStateOf(item.title) }
     var category by remember(item.id) { mutableStateOf(item.category) }
     var remark by remember(item.id) { mutableStateOf(item.remark) }
     var occurredAt by remember(item.id) { mutableStateOf(item.occurredAt) }
     var confirmDelete by remember { mutableStateOf(false) }
-    val categories = if (item.type == "INCOME") listOf("เงินเดือน", "รายรับ", "โบนัส", "คืนเงิน", "อื่น ๆ") else listOf("อาหารและเครื่องดื่ม", "ท่องเที่ยวและเดินทาง", "ของใช้และจิปาถะ", "บิลและบริการ", "สุขภาพ", "ชำระหนี้", "ใช้จ่ายทั่วไป")
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("รายละเอียดรายการ") }, text = { Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        OutlinedTextField(amount, { amount = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("จำนวนเงิน") }, singleLine = true)
-        OutlinedTextField(title, { title = it.take(200) }, label = { Text("ชื่อรายการ") }, singleLine = true)
-        Text("หมวด", fontWeight = FontWeight.Bold)
-        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) { categories.forEach { FilterChip(category == it, { category = it }, { Text(it) }) } }
-        OutlinedTextField(occurredAt, { occurredAt = it.take(50) }, label = { Text("วันที่/เวลา") }, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(remark, { remark = it.take(500) }, label = { Text("โน้ต") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
-        if (item.slipFingerprint.isNotBlank()) Text("รายการนี้มาจากสลิป ระบบใช้รหัสเฉพาะเพื่อป้องกันการบันทึกซ้ำ โดยไม่ได้เก็บรูปสลิป", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-        TextButton(onClick = { confirmDelete = true }, modifier = Modifier.align(Alignment.End)) { Icon(Icons.Default.Delete, null); Text("ลบรายการ", color = MaterialTheme.colorScheme.error) }
-    } }, confirmButton = { Button(enabled = amount.toDoubleOrNull()?.let { it > 0 } == true, onClick = { onUpdate(DraftTransaction(amount, title, TransactionType.valueOf(item.type), item.source, category = category, remark = remark, occurredAt = occurredAt, slipFingerprint = item.slipFingerprint)) }) { Icon(Icons.Default.Edit, null); Spacer(Modifier.width(4.dp)); Text("บันทึกการแก้ไข") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("ปิด") } })
+    var showSlip by remember { mutableStateOf(false) }
+    val slipUri = remember(item.id) { LocalSlipLinkStore.get(context, item.id) }
+    val categories = remember(item.type) { CategoryStore.all(context, item.type == "INCOME") }
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(Modifier.fillMaxSize(), color = Color(0xFFFFF8EE)) {
+            Column(Modifier.fillMaxSize().statusBarsPadding()) {
+                Surface(color = Color(0xFFFFF3DF)) { Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onDismiss) { Icon(Icons.Default.ArrowBack, "กลับ", tint = Color(0xFF0B5D5B)) }
+                    Text("รายละเอียดรายการ", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge, color = Color(0xFF0B5D5B), fontWeight = FontWeight.Black)
+                    IconButton(onClick = { confirmDelete = true }) { Icon(Icons.Default.Delete, "ลบรายการ", tint = MaterialTheme.colorScheme.error) }
+                } }
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(item.type == "EXPENSE", {}, { Text("รายจ่าย") }, modifier = Modifier.weight(1f))
+                    FilterChip(item.type == "INCOME", {}, { Text("รายรับ") }, modifier = Modifier.weight(1f))
+                    FilterChip(false, {}, { Text("ย้ายเงิน") }, enabled = false, modifier = Modifier.weight(1f))
+                }
+                LazyColumn(Modifier.weight(1f).padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
+                    item { OutlinedTextField(occurredAt, { occurredAt = it.take(50) }, label = { Text("วันที่/เวลา") }, modifier = Modifier.fillMaxWidth(), leadingIcon = { Icon(Icons.Default.ReceiptLong, null) }) }
+                    item { Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF0B5D5B)), shape = RoundedCornerShape(24.dp)) { OutlinedTextField(amount, { amount = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("จำนวนเงิน") }, suffix = { Text("บาท") }, textStyle = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold), singleLine = true, modifier = Modifier.fillMaxWidth().padding(14.dp), colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedLabelColor = Color(0xFF76C7B7), unfocusedLabelColor = Color(0xFFB6DAD3), focusedBorderColor = Color(0xFF76C7B7), unfocusedBorderColor = Color(0xFF76C7B7), focusedSuffixColor = Color.White, unfocusedSuffixColor = Color.White)) } }
+                    item { OutlinedTextField(title, { title = it.take(200) }, label = { Text("ชื่อผู้รับ/ชื่อรายการ") }, modifier = Modifier.fillMaxWidth(), singleLine = true) }
+                    item { Card(colors = CardDefaults.cardColors(containerColor = Color.White)) { Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Text("เลือกหมวด / แท็ก", color = Color(0xFF0B5D5B), fontWeight = FontWeight.Bold); Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) { categories.forEach { FilterChip(category == it, { category = it }, { Text(it) }) } }; Text("เพิ่มหรือลบหมวดได้จากหน้าโปรไฟล์", style = MaterialTheme.typography.bodySmall, color = Color.Gray) } } }
+                    item { OutlinedTextField(remark, { remark = it.take(500) }, label = { Text("เพิ่มโน้ต") }, modifier = Modifier.fillMaxWidth(), minLines = 3) }
+                    if (slipUri.isNotBlank()) item { SlipSourceCard(slipUri, title, occurredAt) { showSlip = true } }
+                    if (item.slipFingerprint.isNotBlank()) item { Text("รูปสลิปยังอยู่ในเครื่องเดิมและไม่ถูกอัปโหลด หากลบหรือย้ายรูป แอปจะเปิดดูไม่ได้", style = MaterialTheme.typography.bodySmall, color = Color.Gray) }
+                }
+                Surface(color = Color.White, tonalElevation = 4.dp) { Button(enabled = amount.toDoubleOrNull()?.let { it > 0 } == true, onClick = { onUpdate(DraftTransaction(amount, title, TransactionType.valueOf(item.type), item.source, category = category, remark = remark, occurredAt = occurredAt, slipFingerprint = item.slipFingerprint)) }, modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(16.dp).height(54.dp), shape = RoundedCornerShape(20.dp)) { Icon(Icons.Default.Edit, null); Spacer(Modifier.width(6.dp)); Text("บันทึกการแก้ไข", fontWeight = FontWeight.Bold) } }
+            }
+        }
+    }
     if (confirmDelete) AlertDialog(onDismissRequest = { confirmDelete = false }, title = { Text("ลบรายการนี้?") }, text = { Text("ยอดและข้อมูลรายการจะถูกลบจากบัญชีของคุณ") }, confirmButton = { Button(onClick = onDelete, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)) { Text("ลบ") } }, dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("ยกเลิก") } })
+    if (showSlip) FullScreenSlipDialog(slipUri) { showSlip = false }
+}
+
+@Composable
+private fun SlipSourceCard(uri: String, title: String, occurredAt: String, open: () -> Unit) {
+    val context = LocalContext.current
+    var bitmap by remember(uri) { mutableStateOf<android.graphics.Bitmap?>(null) }
+    LaunchedEffect(uri) { bitmap = withContext(Dispatchers.IO) { runCatching { context.contentResolver.openInputStream(Uri.parse(uri))?.use(BitmapFactory::decodeStream) }.getOrNull() } }
+    Card(Modifier.fillMaxWidth().clickable(onClick = open), colors = CardDefaults.cardColors(containerColor = Color(0xFFE5F2EF))) {
+        Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) { Text("ข้อมูลจากสลิป", fontWeight = FontWeight.Bold, color = Color(0xFF0B5D5B)); Text(title.ifBlank { "ไม่พบชื่อผู้รับ" }); if (occurredAt.isNotBlank()) Text(occurredAt, style = MaterialTheme.typography.bodySmall, color = Color.Gray); Text("แตะเพื่อดูสลิป", color = Color(0xFFF27D6B), fontWeight = FontWeight.Bold) }
+            Spacer(Modifier.width(12.dp))
+            if (bitmap != null) androidx.compose.foundation.Image(bitmap!!.asImageBitmap(), "รูปย่อสลิป", Modifier.size(92.dp), contentScale = ContentScale.Crop) else Surface(Modifier.size(92.dp), color = Color(0xFFCEE5DF), shape = RoundedCornerShape(12.dp)) { Icon(Icons.Default.ImageSearch, null, Modifier.padding(28.dp), tint = Color(0xFF0B5D5B)) }
+        }
+    }
+}
+
+@Composable
+private fun FullScreenSlipDialog(uri: String, close: () -> Unit) {
+    val context = LocalContext.current
+    var bitmap by remember(uri) { mutableStateOf<android.graphics.Bitmap?>(null) }
+    var unavailable by remember(uri) { mutableStateOf(false) }
+    LaunchedEffect(uri) {
+        bitmap = withContext(Dispatchers.IO) { runCatching { context.contentResolver.openInputStream(Uri.parse(uri))?.use(BitmapFactory::decodeStream) }.getOrNull() }
+        unavailable = bitmap == null
+    }
+    Dialog(onDismissRequest = close, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(Modifier.fillMaxSize(), color = Color.Black) {
+            Box(Modifier.fillMaxSize()) {
+                bitmap?.let { androidx.compose.foundation.Image(it.asImageBitmap(), "รูปสลิปต้นฉบับ", Modifier.fillMaxSize().padding(16.dp), contentScale = ContentScale.Fit) }
+                if (bitmap == null && !unavailable) CircularProgressIndicator(Modifier.align(Alignment.Center), color = Color.White)
+                if (unavailable) Text("เปิดรูปต้นฉบับไม่ได้\nรูปอาจถูกลบหรือย้ายออกจากเครื่อง", color = Color.White, modifier = Modifier.align(Alignment.Center), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                TextButton(onClick = close, modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(12.dp)) { Text("ปิด", color = Color.White) }
+            }
+        }
+    }
 }
 
 @Composable
@@ -351,7 +411,17 @@ private fun DebtPlannerScreen(onClose: () -> Unit) {
     val context = LocalContext.current; val repository = remember { DebtRepository() }
     var debts by remember { mutableStateOf(emptyList<Debt>()) }; var create by remember { mutableStateOf(false) }; var selected by remember { mutableStateOf<Debt?>(null) }; var target by remember { mutableStateOf<Debt?>(null) }; var draft by remember { mutableStateOf<DraftTransaction?>(null) }; var message by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) { repository.observe { updated -> debts = updated; selected = selected?.let { current -> updated.firstOrNull { it.id == current.id } } } }
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? -> if (uri != null) TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS).process(InputImage.fromFilePath(context, uri)).addOnSuccessListener { result -> val parsed = SlipParser.parse(result.text, "debt_slip", imageDate(context, uri)); if (parsed.amount.toDoubleOrNull()?.let { it > 0 } == true) draft = parsed else message = "อ่านยอดจากสลิปไม่พบ กรุณาเลือกสลิปที่ชัดเจน" }.addOnFailureListener { message = "อ่านสลิปไม่สำเร็จ" } }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+        if (uri != null) {
+            runCatching { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+            val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+            recognizer.process(InputImage.fromFilePath(context, uri)).addOnSuccessListener { result ->
+                val parsed = SlipParser.parse(result.text, "debt_slip", imageDate(context, uri)).copy(slipUri = uri.toString())
+                if (parsed.amount.toDoubleOrNull()?.let { it > 0 } == true) draft = parsed else message = "อ่านยอดจากสลิปไม่พบ กรุณาเลือกสลิปที่ชัดเจน"
+                recognizer.close()
+            }.addOnFailureListener { message = "อ่านสลิปไม่สำเร็จ"; recognizer.close() }
+        }
+    }
     Column(Modifier.fillMaxSize()) {
         Surface(color = Color(0xFF0B5D5B)) { Row(Modifier.fillMaxWidth().statusBarsPadding().padding(10.dp), verticalAlignment = Alignment.CenterVertically) { IconButton(onClick = { if (selected != null) selected = null else onClose() }) { Icon(Icons.Default.ArrowBack, "กลับ", tint = Color.White) }; Text(selected?.name ?: "รายการหนี้", color = Color.White, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold); Spacer(Modifier.weight(1f)); if (selected == null) IconButton(onClick = { create = true }) { Icon(Icons.Default.Add, "เพิ่มหนี้", tint = Color.White) } } }
         LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
@@ -359,7 +429,7 @@ private fun DebtPlannerScreen(onClose: () -> Unit) {
                 item { Text("เลือกหนี้เพื่อดูรายละเอียดและประวัติชำระ", style = MaterialTheme.typography.titleMedium); Text("รองรับหนี้หลายก้อนและแยกประวัติของแต่ละรายการ", color = Color.Gray, style = MaterialTheme.typography.bodySmall) }
                 if (debts.isEmpty()) item { Card { Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) { Text("ยังไม่มีรายการหนี้"); TextButton(onClick = { create = true }) { Text("+ เพิ่มหนี้ก้อนแรก") } } } }
                 items(debts, key = { it.id }) { DebtListCard(it) { selected = it } }
-            } else item { DebtDetailCard(selected!!, repository, { target = selected; picker.launch("image/*") }) { debt -> repository.delete(debt) { error -> message = error ?: "ลบรายการหนี้แล้ว"; if (error == null) selected = null } } }
+            } else item { DebtDetailCard(selected!!, repository, { target = selected; picker.launch(arrayOf("image/*")) }) { debt -> repository.delete(debt) { error -> message = error ?: "ลบรายการหนี้แล้ว"; if (error == null) selected = null } } }
         }
     }
     if (create) CreateDebtDialog({ create = false }) { name, balance, interest -> repository.add(name, balance, interest) { message = it ?: "เพิ่มหนี้แล้ว" }; create = false }
@@ -447,19 +517,36 @@ private fun VerifyEmailScreen(repository: AuthRepository, email: String, onVerif
 @Composable
 private fun ProfileDialog(repository: AuthRepository, onDismiss: () -> Unit) {
     val context = LocalContext.current
-    var name by remember { mutableStateOf("") }; var phone by remember { mutableStateOf("") }; var message by remember { mutableStateOf<String?>(null) }; var confirmReset by remember { mutableStateOf(false) }; var confirmDelete by remember { mutableStateOf(false) }; var deleting by remember { mutableStateOf(false) }
+    var name by remember { mutableStateOf("") }; var phone by remember { mutableStateOf("") }; var message by remember { mutableStateOf<String?>(null) }; var confirmReset by remember { mutableStateOf(false) }; var confirmDelete by remember { mutableStateOf(false) }; var deleting by remember { mutableStateOf(false) }; var manageCategories by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { repository.loadProfile { savedName, savedPhone -> name = savedName; phone = savedPhone } }
     AlertDialog(onDismissRequest = onDismiss, title = { Text("โปรไฟล์") }, text = { Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(repository.auth.currentUser?.phoneNumber ?: repository.auth.currentUser?.email.orEmpty(), color = Color.Gray)
         OutlinedTextField(name, { name = it }, label = { Text("ชื่อที่แสดง") }, singleLine = true)
         OutlinedTextField(phone, { phone = it.filter { c -> c.isDigit() || c == '+' || c == '-' } }, label = { Text("เบอร์โทร (ไม่บังคับ)") }, singleLine = true)
         message?.let { Text(it) }
+        TextButton(onClick = { manageCategories = true }) { Text("จัดการหมวดรายรับ/รายจ่าย") }
         TextButton(onClick = { repository.signOut(); onDismiss() }) { Text("ออกจากระบบ", color = MaterialTheme.colorScheme.error) }
         TextButton(onClick = { confirmReset = true }) { Text("รีเซ็ตข้อมูลของฉัน", color = MaterialTheme.colorScheme.error) }
         TextButton(onClick = { confirmDelete = true }) { Text("ลบบัญชีถาวร", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold) }
     } }, confirmButton = { Button(onClick = { repository.updateProfile(name, phone) { message = it ?: "บันทึกแล้ว" } }) { Text("บันทึก") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("ปิด") } })
-    if (confirmReset) AlertDialog(onDismissRequest = { if (!deleting) confirmReset = false }, title = { Text("รีเซ็ตข้อมูลของฉัน?") }, text = { Text("รายรับ รายจ่าย หนี้ ประวัติชำระ โปรไฟล์ และคิวสลิปรอตรวจของบัญชีนี้จะถูกลบ บัญชีและเบอร์มือถือยังคงอยู่") }, confirmButton = { Button(enabled = !deleting, onClick = { deleting = true; repository.clearUsageData { error -> deleting = false; if (error == null) { PendingSlipStore.clearUsage(context); onDismiss() } else message = error; confirmReset = false } }, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)) { Text(if (deleting) "กำลังรีเซ็ต…" else "ยืนยันรีเซ็ต") } }, dismissButton = { TextButton(enabled = !deleting, onClick = { confirmReset = false }) { Text("ยกเลิก") } })
-    if (confirmDelete) AlertDialog(onDismissRequest = { if (!deleting) confirmDelete = false }, title = { Text("ลบบัญชีถาวร?") }, text = { Text("ข้อมูลทั้งหมดและบัญชีเข้าสู่ระบบนี้จะถูกลบถาวร หลังจากนั้นสามารถสมัครใหม่ด้วยเบอร์เดิมและเริ่มตั้งแต่ต้นได้") }, confirmButton = { Button(enabled = !deleting, onClick = { deleting = true; repository.deleteOwnAccount { error -> deleting = false; if (error == null) { PendingSlipStore.clearUsage(context); onDismiss() } else message = error; confirmDelete = false } }, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)) { Text(if (deleting) "กำลังลบ…" else "ลบบัญชีถาวร") } }, dismissButton = { TextButton(enabled = !deleting, onClick = { confirmDelete = false }) { Text("ยกเลิก") } })
+    if (manageCategories) CategoryManagerDialog { manageCategories = false }
+    if (confirmReset) AlertDialog(onDismissRequest = { if (!deleting) confirmReset = false }, title = { Text("รีเซ็ตข้อมูลของฉัน?") }, text = { Text("รายรับ รายจ่าย หนี้ ประวัติชำระ โปรไฟล์ หมวดส่วนตัว และคิวสลิปรอตรวจของบัญชีนี้จะถูกลบ บัญชีและเบอร์มือถือยังคงอยู่") }, confirmButton = { Button(enabled = !deleting, onClick = { deleting = true; repository.clearUsageData { error -> deleting = false; if (error == null) { PendingSlipStore.clearUsage(context); LocalSlipLinkStore.clear(context); CategoryStore.clear(context); onDismiss() } else message = error; confirmReset = false } }, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)) { Text(if (deleting) "กำลังรีเซ็ต…" else "ยืนยันรีเซ็ต") } }, dismissButton = { TextButton(enabled = !deleting, onClick = { confirmReset = false }) { Text("ยกเลิก") } })
+    if (confirmDelete) AlertDialog(onDismissRequest = { if (!deleting) confirmDelete = false }, title = { Text("ลบบัญชีถาวร?") }, text = { Text("ข้อมูลทั้งหมดและบัญชีเข้าสู่ระบบนี้จะถูกลบถาวร หลังจากนั้นสามารถสมัครใหม่ด้วยเบอร์เดิมและเริ่มตั้งแต่ต้นได้") }, confirmButton = { Button(enabled = !deleting, onClick = { deleting = true; repository.deleteOwnAccount { error -> deleting = false; if (error == null) { PendingSlipStore.clearUsage(context); LocalSlipLinkStore.clear(context); CategoryStore.clear(context); onDismiss() } else message = error; confirmDelete = false } }, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)) { Text(if (deleting) "กำลังลบ…" else "ลบบัญชีถาวร") } }, dismissButton = { TextButton(enabled = !deleting, onClick = { confirmDelete = false }) { Text("ยกเลิก") } })
+}
+
+@Composable
+private fun CategoryManagerDialog(close: () -> Unit) {
+    val context = LocalContext.current
+    var income by remember { mutableStateOf(false) }
+    var newName by remember { mutableStateOf("") }
+    var refresh by remember { mutableIntStateOf(0) }
+    val categories = remember(income, refresh) { CategoryStore.all(context, income) }
+    val defaults = if (income) CategoryStore.incomeDefaults else CategoryStore.expenseDefaults
+    AlertDialog(onDismissRequest = close, title = { Text("จัดการหมวด") }, text = { Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { FilterChip(!income, { income = false }, { Text("รายจ่าย") }); FilterChip(income, { income = true }, { Text("รายรับ") }) }
+        Row(verticalAlignment = Alignment.CenterVertically) { OutlinedTextField(newName, { newName = it.take(50) }, label = { Text("เพิ่มหมวดใหม่") }, modifier = Modifier.weight(1f), singleLine = true); IconButton(enabled = newName.isNotBlank(), onClick = { CategoryStore.add(context, income, newName); newName = ""; refresh++ }) { Icon(Icons.Default.Add, "เพิ่มหมวด") } }
+        categories.forEach { category -> Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Text(category, Modifier.weight(1f)); if (category !in defaults) IconButton(onClick = { CategoryStore.remove(context, income, category); refresh++ }) { Icon(Icons.Default.Delete, "ลบ $category", tint = MaterialTheme.colorScheme.error) } } }
+    } }, confirmButton = { Button(onClick = close) { Text("เสร็จ") } })
 }
 
 @Composable
@@ -568,7 +655,7 @@ private fun TransactionDialog(initial: DraftTransaction, onDismiss: () -> Unit, 
             Text(title.ifBlank { "ไม่พบชื่อร้าน" }, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Text("${amount} บาท", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
             if (initial.occurredAt.isNotBlank()) Text("วันที่/เวลา ${initial.occurredAt}")
-            Text("หมวด ${initial.category}")
+            Text("หมวด: ยังไม่จัดหมวด (แตะรายการหลังบันทึกเพื่อใส่เอง)")
             if (initial.remark.isNotBlank()) Text("หมายเหตุ ${initial.remark}")
             Text("ข้อมูลอ่านจากรูปอัตโนมัติ หากไม่ถูกต้องให้ยกเลิกและเลือกสลิปที่ชัดกว่า", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
         }

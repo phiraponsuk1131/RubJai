@@ -42,8 +42,8 @@ class TransactionRepository {
         missing = { onDone("กรุณาเข้าสู่ระบบใหม่") },
         block = { uid ->
             val fingerprint = draft.slipFingerprint.ifBlank { fingerprintFor(draft) }
-            val slipBased = draft.type == TransactionType.EXPENSE && draft.rawText.isNotBlank()
-            val id = if (slipBased) "slip_$fingerprint" else UUID.randomUUID().toString()
+            val slipBased = draft.type == TransactionType.EXPENSE && (draft.rawText.isNotBlank() || draft.slipFingerprint.isNotBlank())
+            val id = if (slipBased) documentIdFor(draft) else UUID.randomUUID().toString()
             val ref = transactions(uid).document(id)
             val item = MoneyTransaction(
                 id = id,
@@ -102,6 +102,7 @@ class TransactionRepository {
     )
 
     companion object {
+        fun documentIdFor(draft: DraftTransaction): String = "slip_${draft.slipFingerprint.ifBlank { fingerprintFor(draft) }}"
         fun fingerprintFor(draft: DraftTransaction): String {
             val canonical = draft.rawText.lowercase().replace(Regex("\\s+"), " ").trim()
                 .ifBlank { "${draft.amount}|${draft.occurredAt}|${draft.category}" }

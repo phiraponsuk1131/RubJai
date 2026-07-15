@@ -28,11 +28,11 @@ object SlipParser {
             line.length in 3..100 && listOf("SHOP", "MR.D.I.Y", "MINOR", "LIMITED", "CO.,LTD", "COMPANY").any { line.contains(it, true) }
         } ?: lines.firstOrNull { it.length in 3..80 && !it.any(Char::isDigit) && !it.contains(":") && !it.contains("สำเร็จ") }.orEmpty()
         val remark = remarkPattern.find(text)?.groupValues?.getOrNull(1)?.trim().orEmpty()
-        val category = categorize("$merchant $remark $text")
+        val category = "ยังไม่จัดหมวด"
         val rawDate = datePattern.find(text)?.value ?: thaiSlipDatePattern.find(text)?.groupValues?.getOrNull(1)?.replace(Regex("\\s+"), " ")?.trim().orEmpty()
         val date = normalizeDate(rawDate, imageDate)
         val time = timePattern.find(text)?.value.orEmpty()
-        return DraftTransaction(amount, category, TransactionType.EXPENSE, source, text, category, remark, listOf(date, time).filter(String::isNotBlank).joinToString(" "))
+        return DraftTransaction(amount, merchant.ifBlank { category }, TransactionType.EXPENSE, source, text, category, remark, listOf(date, time).filter(String::isNotBlank).joinToString(" "))
     }
 
     private fun findKPlusRecipient(lines: List<String>): String? {
@@ -62,15 +62,4 @@ object SlipParser {
         return "${calendar.get(Calendar.DAY_OF_MONTH)} ${thaiMonths[calendar.get(Calendar.MONTH)]} ${buddhistYear.toString().padStart(2, '0')}"
     }
 
-    private fun categorize(value: String): String {
-        return when {
-            listOf("restaurant", "food", "chester", "cafe", "coffee", "minor dq", "dairy queen", "kfc", "mcdonald", "อาหาร", "ข้าว", "กาแฟ", "ชา", "เบเกอรี่").any { value.contains(it, true) } -> "อาหารและเครื่องดื่ม"
-            listOf("agoda", "booking", "hotel", "resort", "airasia", "airways", "flight", "trip", "travel", "grab", "bolt", "taxi", "bts", "mrt", "fuel", "gas", "เดินทาง", "ท่องเที่ยว", "โรงแรม", "น้ำมัน").any { value.contains(it, true) } -> "ท่องเที่ยวและเดินทาง"
-            listOf("mr.d.i.y", "shop", "store", "mall", "market", "ของใช้", "ซื้อของ", "ช้อป").any { value.contains(it, true) } -> "ของใช้และจิปาถะ"
-            listOf("bill", "muni", "electric", "water", "internet", "ค่าไฟ", "ค่าน้ำ", "บิล").any { value.contains(it, true) } -> "บิล/สาธารณูปโภค"
-            listOf("hospital", "clinic", "pharmacy", "health", "ยา", "โรงพยาบาล").any { value.contains(it, true) } -> "สุขภาพ"
-            listOf("transfer", "โอนเงิน").any { value.contains(it, true) } -> "โอนเงิน"
-            else -> "ใช้จ่ายทั่วไป"
-        }
-    }
 }

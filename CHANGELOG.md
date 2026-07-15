@@ -11,6 +11,8 @@
 - Added owner-only usage reset and permanent account deletion with a fresh-registration path.
 - Added debt deletion including its payment history and changed debt-payment duplicate protection to SHA-256.
 - Expanded first-run documentation and updated GitHub/Firebase setup for version 2.0.0 and Phone Auth.
+- Reworked slip results to extract amount, recipient/title, date, and time while leaving new items uncategorized until the user opens details and assigns a category.
+- Added user-managed income/expense categories and local-only original-slip links for detail preview without uploading or copying images.
 
 ## 1.3.3
 

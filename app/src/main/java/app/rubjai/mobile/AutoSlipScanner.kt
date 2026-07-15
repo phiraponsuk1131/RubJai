@@ -49,8 +49,8 @@ object PendingSlipStore {
     @Synchronized fun remove(context: Context, id: String) = save(context, load(context).filterNot { it.id == id })
     @Synchronized fun clearUsage(context: Context) { prefs(context).edit().remove(PENDING).remove(PROCESSED).apply() }
     private fun save(context: Context, items: List<PendingSlip>) { prefs(context).edit().putString(PENDING, JSONArray(items.map { it.toJson() }).toString()).apply() }
-    private fun PendingSlip.toJson() = JSONObject().put("id", id).put("amount", draft.amount).put("title", draft.title).put("rawText", draft.rawText.take(3000)).put("category", draft.category).put("remark", draft.remark).put("occurredAt", draft.occurredAt)
-    private fun JSONObject.toPendingSlip() = PendingSlip(getString("id"), DraftTransaction(optString("amount"), optString("title"), TransactionType.EXPENSE, "auto_kplus", optString("rawText"), optString("category", "ใช้จ่ายทั่วไป"), optString("remark"), optString("occurredAt")))
+    private fun PendingSlip.toJson() = JSONObject().put("id", id).put("amount", draft.amount).put("title", draft.title).put("rawText", draft.rawText.take(3000)).put("category", draft.category).put("remark", draft.remark).put("occurredAt", draft.occurredAt).put("slipUri", draft.slipUri)
+    private fun JSONObject.toPendingSlip() = PendingSlip(getString("id"), DraftTransaction(optString("amount"), optString("title"), TransactionType.EXPENSE, "auto_kplus", optString("rawText"), optString("category", "ใช้จ่ายทั่วไป"), optString("remark"), optString("occurredAt"), slipUri = optString("slipUri")))
 }
 
 object KPlusSyncManager {
@@ -97,7 +97,7 @@ class KPlusScanWorker(context: Context, params: WorkerParameters) : Worker(conte
                     runCatching {
                         val text = Tasks.await(recognizer.process(InputImage.fromFilePath(applicationContext, uri))).text
                         val isKPlus = text.contains("K+", true) || kPlusReference.containsMatchIn(text)
-                        val draft = if (isKPlus) SlipParser.parse(text, "auto_kplus", imageDate) else null
+                        val draft = if (isKPlus) SlipParser.parse(text, "auto_kplus", imageDate).copy(slipUri = uri.toString()) else null
                         if (draft?.amount?.toDoubleOrNull()?.let { value -> value > 0 } == true) { PendingSlipStore.add(applicationContext, mediaKey, draft); found++ }
                         else PendingSlipStore.markProcessed(applicationContext, mediaKey)
                     }
