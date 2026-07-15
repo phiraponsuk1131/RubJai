@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.0.3
+
+- Added an anonymous trial sign-in that bypasses SMS OTP for reviewing the app before Firebase Billing is enabled.
+
 ## 2.0.2
 
 - Show the installed APK version name and version code in the top-right corner of the phone sign-in screen.

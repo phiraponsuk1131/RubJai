@@ -593,6 +593,15 @@ private fun AuthScreen(repository: AuthRepository) {
                                 busy = true; error = null
                                 repository.requestPhoneOtp(activity, phone, { id, _ -> verificationId = id; busy = false }, finishCredential, { error = it; busy = false })
                             }) { Text(if (busy) "กำลังส่ง…" else "รับรหัส OTP") }
+                            OutlinedButton(
+                                enabled = !busy,
+                                modifier = Modifier.fillMaxWidth().height(50.dp),
+                                onClick = {
+                                    busy = true; error = null
+                                    repository.startTrial { failure -> busy = false; error = failure }
+                                },
+                            ) { Text("ทดลองใช้งานก่อน (ไม่ใช้ OTP)") }
+                            Text("โหมดทดลองใช้บัญชีชั่วคราวแยกจากบัญชีที่ยืนยันด้วยเบอร์โทร", style = MaterialTheme.typography.bodySmall, color = RubMuted)
                     } else {
                             Text("ส่งรหัสไปที่ $phone แล้ว", color = RubMuted)
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) { repeat(6) { index -> Surface(Modifier.weight(1f).aspectRatio(1f), RoundedCornerShape(12.dp), color = RubInk) { Box(contentAlignment = Alignment.Center) { Text(otp.getOrNull(index)?.toString().orEmpty(), color = RubMint, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black) } } } }

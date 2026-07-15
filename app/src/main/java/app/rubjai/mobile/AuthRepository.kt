@@ -104,6 +104,10 @@ class AuthRepository {
 
     fun signOut() = auth.signOut()
 
+    fun startTrial(done: (String?) -> Unit) = auth.signInAnonymously()
+        .addOnSuccessListener { done(null) }
+        .addOnFailureListener { done(it.localizedMessage ?: "เริ่มโหมดทดลองไม่สำเร็จ") }
+
     fun ensureCleanStartV2(done: (String?) -> Unit) {
         val user = auth.currentUser ?: return done("ไม่พบบัญชี")
         val root = db.collection("users").document(user.uid)
