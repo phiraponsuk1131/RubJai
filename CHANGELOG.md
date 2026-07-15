@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.0.5
+
+- Check GitHub Releases and show the update dialog before phone sign-in as well as after entering the app.
+
 ## 2.0.4
 
 - Enable BuildConfig generation so the APK compiles with its displayed version information.

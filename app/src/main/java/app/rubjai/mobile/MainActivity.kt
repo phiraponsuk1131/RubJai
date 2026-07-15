@@ -559,9 +559,18 @@ private fun DebtPlannerScreen(onClose: () -> Unit) {
 
 @Composable
 private fun AuthScreen(repository: AuthRepository) {
-    val activity = LocalContext.current as Activity
+    val context = LocalContext.current
+    val activity = context as Activity
+    val updateManager = remember { InAppUpdateManager() }
+    var availableUpdate by remember { mutableStateOf<AppUpdateInfo?>(null) }
+    var updateProgress by remember { mutableStateOf<Float?>(null) }
+    var updateMessage by remember { mutableStateOf<String?>(null) }
     var phone by remember { mutableStateOf("") }; var name by remember { mutableStateOf("") }; var otp by remember { mutableStateOf("") }
     var verificationId by remember { mutableStateOf<String?>(null) }; var busy by remember { mutableStateOf(false) }; var error by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        val version = context.packageManager.getPackageInfo(context.packageName, 0).versionName.orEmpty()
+        updateManager.checkForUpdate(version) { availableUpdate = it }
+    }
     val finishCredential: (PhoneAuthCredential) -> Unit = { credential -> busy = true; repository.signInWithPhoneCredential(credential, name) { busy = false; error = it } }
     Surface(Modifier.fillMaxSize(), color = RubInk) {
         Column(Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -614,6 +623,26 @@ private fun AuthScreen(repository: AuthRepository) {
                 }
             }
             }
+        }
+        availableUpdate?.let { update ->
+            AlertDialog(
+                onDismissRequest = { if (updateProgress == null) availableUpdate = null },
+                title = { Text("RubJai ${update.version} พร้อมอัปเดต") },
+                text = {
+                    Column(Modifier.fillMaxWidth().heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                        Text(update.releaseNotes)
+                        updateProgress?.let { progress ->
+                            Spacer(Modifier.height(16.dp)); LinearProgressIndicator({ progress }, Modifier.fillMaxWidth()); Text("กำลังดาวน์โหลด ${(progress * 100).toInt()}%")
+                        }
+                        updateMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                    }
+                },
+                confirmButton = { Button(enabled = updateProgress == null, onClick = {
+                    if (!updateManager.canRequestInstall(context)) { updateMessage = "อนุญาตติดตั้งจากแหล่งนี้ แล้วกลับมากดดาวน์โหลดอีกครั้ง"; updateManager.openInstallPermission(context) }
+                    else { updateProgress = 0f; updateManager.download(context, update, { updateProgress = it }) { uri -> updateProgress = null; if (uri != null) updateManager.launchInstaller(context, uri) else updateMessage = "ดาวน์โหลดไม่สำเร็จ กรุณาลองใหม่" } }
+                }) { Text("ดาวน์โหลดอัปเดต") } },
+                dismissButton = { if (updateProgress == null) TextButton(onClick = { availableUpdate = null }) { Text("ภายหลัง") } },
+            )
         }
     }
 }
