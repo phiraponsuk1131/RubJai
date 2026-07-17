@@ -2,11 +2,14 @@ package app.rubjai.mobile
 
 import android.content.ContentUris
 import android.content.Context
+import android.database.ContentObserver
+import android.os.Handler
+import android.os.Looper
 import android.provider.MediaStore
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
 import androidx.work.WorkInfo
+import androidx.work.WorkManager
 import androidx.work.Worker
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
@@ -49,13 +52,41 @@ object PendingSlipStore {
     @Synchronized fun remove(context: Context, id: String) = save(context, load(context).filterNot { it.id == id })
     @Synchronized fun clearUsage(context: Context) { prefs(context).edit().remove(PENDING).remove(PROCESSED).apply() }
     private fun save(context: Context, items: List<PendingSlip>) { prefs(context).edit().putString(PENDING, JSONArray(items.map { it.toJson() }).toString()).apply() }
-    private fun PendingSlip.toJson() = JSONObject().put("id", id).put("amount", draft.amount).put("title", draft.title).put("rawText", draft.rawText.take(3000)).put("category", draft.category).put("remark", draft.remark).put("occurredAt", draft.occurredAt).put("slipUri", draft.slipUri)
-    private fun JSONObject.toPendingSlip() = PendingSlip(getString("id"), DraftTransaction(optString("amount"), optString("title"), TransactionType.EXPENSE, "auto_bank_slip", optString("rawText"), optString("category", "ยังไม่จัดหมวด"), optString("remark"), optString("occurredAt"), slipUri = optString("slipUri")))
+    private fun PendingSlip.toJson() = JSONObject()
+        .put("id", id)
+        .put("amount", draft.amount)
+        .put("title", draft.title)
+        .put("rawText", draft.rawText.take(3000))
+        .put("category", draft.category)
+        .put("remark", draft.remark)
+        .put("occurredAt", draft.occurredAt)
+        .put("slipUri", draft.slipUri)
+        .put("slipFingerprint", draft.slipFingerprint)
+
+    private fun JSONObject.toPendingSlip() = PendingSlip(
+        getString("id"),
+        DraftTransaction(
+            optString("amount"),
+            optString("title"),
+            TransactionType.EXPENSE,
+            "auto_bank_slip",
+            optString("rawText"),
+            optString("category", "ยังไม่จัดหมวด"),
+            optString("remark"),
+            optString("occurredAt"),
+            slipFingerprint = optString("slipFingerprint"),
+            slipUri = optString("slipUri"),
+        )
+    )
 }
 
 object KPlusSyncManager {
     private const val WORK = "rubjai_kplus_sync_now"
     private const val PREFS = "auto_kplus_scan"
+    private const val MIN_REALTIME_GAP_MS = 3_000L
+    private var realtimeObserver: ContentObserver? = null
+    private var lastRealtimeSyncAt = 0L
+
     fun hasConsent(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean("consent", false)
     fun setConsent(context: Context, consent: Boolean) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean("consent", consent).apply()
     fun syncNow(context: Context): UUID {
@@ -64,7 +95,26 @@ object KPlusSyncManager {
         return request.id
     }
     fun workInfo(context: Context, id: UUID): WorkInfo? = WorkManager.getInstance(context).getWorkInfoById(id).get()
-    fun revoke(context: Context) { setConsent(context, false); WorkManager.getInstance(context).cancelUniqueWork(WORK) }
+    fun revoke(context: Context) { setConsent(context, false); WorkManager.getInstance(context).cancelUniqueWork(WORK); stopRealtime(context) }
+
+    fun startRealtime(context: Context, onSync: (UUID) -> Unit) {
+        if (realtimeObserver != null) return
+        val appContext = context.applicationContext
+        realtimeObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean) {
+                val now = System.currentTimeMillis()
+                if (!hasConsent(appContext) || now - lastRealtimeSyncAt < MIN_REALTIME_GAP_MS) return
+                lastRealtimeSyncAt = now
+                onSync(syncNow(appContext))
+            }
+        }
+        appContext.contentResolver.registerContentObserver(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, true, realtimeObserver!!)
+    }
+
+    fun stopRealtime(context: Context) {
+        realtimeObserver?.let { context.applicationContext.contentResolver.unregisterContentObserver(it) }
+        realtimeObserver = null
+    }
 }
 
 class KPlusScanWorker(context: Context, params: WorkerParameters) : Worker(context, params) {
@@ -84,7 +134,9 @@ class KPlusScanWorker(context: Context, params: WorkerParameters) : Worker(conte
         val before = startTomorrow.timeInMillis / 1000
         val projection = arrayOf(MediaStore.Images.Media._ID, MediaStore.Images.Media.DATE_ADDED)
         val selection = "${MediaStore.Images.Media.DATE_ADDED} >= ? AND ${MediaStore.Images.Media.DATE_ADDED} < ?"
-        val cursor = runCatching { applicationContext.contentResolver.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, projection, selection, arrayOf(since.toString(), before.toString()), "${MediaStore.Images.Media.DATE_ADDED} DESC") }.getOrNull() ?: return Result.success()
+        val cursor = runCatching {
+            applicationContext.contentResolver.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, projection, selection, arrayOf(since.toString(), before.toString()), "${MediaStore.Images.Media.DATE_ADDED} DESC")
+        }.getOrNull() ?: return Result.success()
         val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
         var found = 0
         try {
@@ -101,14 +153,29 @@ class KPlusScanWorker(context: Context, params: WorkerParameters) : Worker(conte
                     val uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id)
                     val imageDate = Date(it.getLong(dateColumn) * 1000)
                     runCatching {
-                        val text = Tasks.await(recognizer.process(InputImage.fromFilePath(applicationContext, uri))).text
-                        val looksLikeSlip = supportedApps.any { text.contains(it, true) } || kPlusReference.containsMatchIn(text) || genericReference.containsMatchIn(text) ||
+                        val image = InputImage.fromFilePath(applicationContext, uri)
+                        val ocrText = Tasks.await(recognizer.process(image)).text
+                        val qr = SlipQrReader.scanBlocking(applicationContext, uri)
+                        val text = SlipQrReader.appendToOcrText(ocrText, qr)
+                        val looksLikeSlip = qr.rawValues.isNotEmpty() ||
+                            qr.transactionReference.isNotBlank() ||
+                            supportedApps.any { app -> text.contains(app, true) } ||
+                            kPlusReference.containsMatchIn(text) ||
+                            genericReference.containsMatchIn(text) ||
                             ((text.contains("สำเร็จ") || text.contains("successful", true)) &&
                                 (text.contains("จำนวน") || text.contains("amount", true)) &&
                                 (text.contains("บาท") || text.contains("THB", true)))
-                        val draft = if (looksLikeSlip) SlipParser.parse(text, "auto_bank_slip", imageDate).copy(slipUri = uri.toString()) else null
-                        if (draft?.amount?.toDoubleOrNull()?.let { value -> value > 0 } == true) { PendingSlipStore.add(applicationContext, mediaKey, draft); found++ }
-                        else PendingSlipStore.markProcessed(applicationContext, mediaKey)
+                        val fingerprint = SlipQrReader.fingerprint(qr)
+                        val draft = if (looksLikeSlip) {
+                            SlipParser.parse(text, if (qr.rawValues.isNotEmpty()) "auto_bank_slip_qr_ocr" else "auto_bank_slip", imageDate)
+                                .copy(slipUri = uri.toString(), slipFingerprint = fingerprint)
+                        } else null
+                        if (draft != null && (draft.amount.toDoubleOrNull()?.let { value -> value > 0 } == true || fingerprint.isNotBlank())) {
+                            PendingSlipStore.add(applicationContext, mediaKey, draft)
+                            found++
+                        } else {
+                            PendingSlipStore.markProcessed(applicationContext, mediaKey)
+                        }
                     }
                 }
             }

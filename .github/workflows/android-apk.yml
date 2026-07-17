@@ -29,6 +29,10 @@ jobs:
       - name: Restore signing key
         env: { ANDROID_KEYSTORE_BASE64: "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" }
         run: if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/rubjai-release.jks"; fi
+      - name: Check Thai text integrity
+        run: node scripts/check-text-integrity.js
+      - name: Check slip parser samples
+        run: node scripts/check-slip-samples.js
       - name: Build APK (no tests)
         env:
           SIGNING_STORE_FILE: "${{ runner.temp }}/rubjai-release.jks"
@@ -54,7 +58,8 @@ jobs:
           path: |
             RubJai-*.apk
             RubJai.sha256
+            APP_UPDATE_NOTES_TH.md
       - name: Publish release for v* tag
         if: startsWith(github.ref, 'refs/tags/v')
         env: { GH_TOKEN: "${{ github.token }}" }
-        run: gh release create "$GITHUB_REF_NAME" RubJai-*.apk RubJai.sha256 --title "RubJai $GITHUB_REF_NAME" --notes-file RELEASE_NOTES.md --verify-tag
+        run: gh release create "$GITHUB_REF_NAME" RubJai-*.apk RubJai.sha256 APP_UPDATE_NOTES_TH.md --title "RubJai $GITHUB_REF_NAME" --notes-file RELEASE_NOTES.md --verify-tag

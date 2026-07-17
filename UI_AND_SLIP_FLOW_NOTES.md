@@ -60,9 +60,19 @@ Auto slip sync now starts when entering the app if:
 
 Pending slips no longer save immediately from the pending list. They now open the same full-screen editor first, so the user can confirm or fix name, amount, category, and note before saving.
 
+Real-time sync now registers a MediaStore observer while the app is open. When a new image is added and the user has already granted consent and image permission, RubJai triggers a throttled sync instead of waiting for the next app start.
+
 ## OCR Limits
 
-RubJai still uses on-device ML Kit text recognition. OCR quality depends on:
+RubJai now uses a QR-first slip flow:
+
+- scan QR / mini-QR from the slip image first
+- use QR reference as the most stable slip fingerprint for duplicate protection
+- append QR amount, merchant, bank, and reference into the text stream when the QR payload exposes them
+- use OCR as fallback and as the source for visible fields that QR does not expose
+- keep every detected slip in the review editor before saving
+
+OCR quality still depends on:
 
 - slip image clarity
 - bank/wallet layout
@@ -78,6 +88,15 @@ The app should always let users correct OCR output before saving because 100% OC
   - added bottom category sheet
   - changed pending slip approval flow
   - added app-entry auto sync when consent and permission are already available
+- `app/src/main/java/app/rubjai/mobile/SlipQrReader.kt`
+  - reads slip QR codes with ML Kit barcode scanning
+  - extracts transaction reference, amount, merchant, and bank when present
+  - creates a stable fingerprint from QR reference/raw payload
+- `app/src/main/java/app/rubjai/mobile/AutoSlipScanner.kt`
+  - runs OCR plus QR-first detection for today's images
+  - registers a real-time MediaStore observer while the app is open and sync consent is active
+- `scripts/check-slip-samples.js`
+  - validates expected recipient, amount, date, and time for K PLUS and Dime sample slip text
 - `CHANGELOG.md`
   - documents the UI and slip flow update
 
@@ -93,9 +112,11 @@ Required release steps:
 2. Bump Android version.
    - update `versionCode`
    - update `versionName`
-   - update README, changelog, and release notes.
+   - update README, changelog, English `RELEASE_NOTES.md`, and Thai `APP_UPDATE_NOTES_TH.md` because the in-app update popup displays the Thai asset.
 3. Run a local assemble build as a safety check.
    - `gradle :app:assembleDebug`
+   - `node scripts/check-text-integrity.js`
+   - `node scripts/check-slip-samples.js`
 4. Commit the exact release scope.
    - include app code, workflow changes, version files, changelog, release notes, and maintainer notes.
    - do not commit `app/google-services.json`, signing keys, `.toolchain/`, or `.tools/`.

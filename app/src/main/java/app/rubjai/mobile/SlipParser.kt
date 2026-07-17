@@ -7,20 +7,21 @@ import java.util.Calendar
 object SlipParser {
     private val thaiMonths = arrayOf("ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค.")
     private val amountPatterns = listOf(
-        Regex("(?:จำนวน|ยอด|amount|เงินเข้า|รับเงิน|โอนเงิน)[^0-9]{0,20}([0-9,]+(?:\\.[0-9]{1,2})?)", RegexOption.IGNORE_CASE),
+        Regex("(?:จำนวน|ยอดเงิน|ยอดโอน|amount|total)[^0-9\\n]{0,28}\\n?\\s*([0-9,]+(?:\\.[0-9]{1,2})?)", RegexOption.IGNORE_CASE),
         Regex("([0-9,]+(?:\\.[0-9]{2}))\\s*(?:บาท|THB)", RegexOption.IGNORE_CASE),
     )
     private val decimalAmount = Regex("(?<![0-9])([0-9]{1,7}(?:,[0-9]{3})*\\.[0-9]{2})(?![0-9])")
     private val timePattern = Regex("(?<![0-9])([01]?[0-9]|2[0-3]):[0-5][0-9](?![0-9])")
     private val datePattern = Regex("(?<![0-9])([0-3]?[0-9][/.-][01]?[0-9][/.-](?:[0-9]{2}|[0-9]{4}))(?![0-9])")
-    private val thaiSlipDatePattern = Regex("(?m)(?<![0-9])([0-3]?[0-9]\\s+[^0-9\\n]{1,12}?\\s+(?:[0-9]{2}|[0-9]{4}))(?=\\s+(?:[01]?[0-9]|2[0-3]):[0-5][0-9])")
+    private val thaiSlipDatePattern = Regex("(?m)(?<![0-9])([0-3]?[0-9]\\s+[^0-9\\n]{1,12}?\\s+(?:[0-9]{2}|[0-9]{4}))(?=\\s*(?:-|,)?\\s*(?:[01]?[0-9]|2[0-3]):[0-5][0-9])")
     private val remarkPattern = Regex("(?:remark|note|memo|หมายเหตุ|บันทึกช่วยจำ)\\s*[:：-]?\\s*([^\\n]{2,120})", RegexOption.IGNORE_CASE)
     private val mrDiyPattern = Regex("(?i)MR\\s*[.\\-]?\\s*D\\s*[.\\-]?\\s*I\\s*[.\\-]?\\s*Y\\s*[.\\-]?[A-Z0-9.\\-]*")
     private val maskedAccountPattern = Regex("(?i)[x*]{2,}[^\\n]{0,20}[0-9]{3,4}[^\\n]{0,10}[x*]")
-    private val recipientLabelPattern = Regex("(?i)^(?:ผู้รับ|ชื่อผู้รับ|ไปยัง|บัญชีปลายทาง|ชื่อบัญชี|receiver|recipient|to)\\s*[:：-]?\\s*(.*)$")
+    private val recipientLabelPattern = Regex("(?i)^(?:ผู้รับ|ชื่อผู้รับ|รับเงินโดย|ไปยัง|โอนไป|บัญชีปลายทาง|ชื่อบัญชี|merchant|merchant name|receiver|recipient|to)\\s*[:：-]?\\s*(.*)$")
     private val recipientStopWords = listOf(
-        "สำเร็จ", "successful", "จากบัญชี", "ผู้โอน", "ผู้ส่ง", "sender", "เลขที่รายการ",
-        "reference", "จำนวน", "amount", "ค่าธรรมเนียม", "fee", "ธนาคาร", "bank",
+        "สำเร็จ", "successful", "จาก", "จากบัญชี", "ผู้โอน", "ผู้ส่ง", "sender", "เลขที่รายการ",
+        "reference", "ref", "รหัสอ้างอิง", "จำนวน", "ยอด", "amount", "total", "ค่าธรรมเนียม", "fee", "ธนาคาร", "bank",
+        "ชำระเงิน", "ชำระสินค้า", "จ่ายบิล", "โอนเงิน", "สแกนตรวจสอบสลิป", "QR สลิป",
     )
     fun parse(text: String, source: String, imageDate: Date? = null): DraftTransaction {
         val labeledAmount = amountPatterns.firstNotNullOfOrNull { it.find(text)?.groupValues?.getOrNull(1) }?.replace(",", "")

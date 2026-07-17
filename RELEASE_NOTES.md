@@ -1,8 +1,8 @@
-# RubJai v2.0.6
+# RubJai v2.0.7
 
-- Reworked the transaction entry screen into a dark navy/yellow full-screen flow with expense, income, and transfer-style tabs.
-- Added a large amount card and a bottom category picker with icon grid styling based on the provided reference.
-- Added a home slip-sync header that shows current sync state, pending slip count, manual picker, resync, and review actions.
-- Changed pending scanned slips so they open the editor before saving, allowing users to confirm name, amount, category, and note.
-- Added automatic slip sync on app entry when scan consent and photo permission are already available.
-- Updated build notes and maintainer documentation in `UI_AND_SLIP_FLOW_NOTES.md`.
+- Fixed broken Thai text rendering from the previous release.
+- Added QR-first slip parsing with OCR fallback for recipient, amount, date, time, and stable slip references.
+- Added real-time slip sync while the app is open, plus scan-on-entry when photo permission and consent are already available.
+- Tuned the category picker closer to the reference UI with circular colored icons and centered labels.
+- Added GitHub Actions gates for text integrity and sample slip parsing before APK build.
+- In-app update notes are provided separately in Thai via `APP_UPDATE_NOTES_TH.md`.

@@ -13,8 +13,8 @@ android {
         applicationId = "app.rubjai.mobile"
         minSdk = 23
         targetSdk = 35
-        versionCode = 17
-        versionName = "2.0.6"
+        versionCode = 18
+        versionName = "2.0.7"
     }
 
     val releaseStoreFile = System.getenv("SIGNING_STORE_FILE")
@@ -53,6 +53,7 @@ dependencies {
     implementation("com.google.firebase:firebase-auth")
     implementation("com.google.firebase:firebase-firestore")
     implementation("com.google.mlkit:text-recognition:16.0.1")
+    implementation("com.google.mlkit:barcode-scanning:17.3.0")
     implementation("com.google.guava:guava:33.3.1-android")
     implementation("androidx.work:work-runtime-ktx:2.11.2")
     debugImplementation("androidx.compose.ui:ui-tooling")
