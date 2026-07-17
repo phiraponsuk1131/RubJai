@@ -1,19 +1,20 @@
 plugins {
     id("com.android.application")
     id("com.google.gms.google-services")
+    id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
 android {
     namespace = "app.rubjai.mobile"
-    compileSdk = 36
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "app.rubjai.mobile"
         minSdk = 23
-        targetSdk = 36
-        versionCode = 16
-        versionName = "2.0.5"
+        targetSdk = 35
+        versionCode = 17
+        versionName = "2.0.6"
     }
 
     val releaseStoreFile = System.getenv("SIGNING_STORE_FILE")
@@ -42,9 +43,9 @@ android {
 }
 
 dependencies {
-    implementation(platform("androidx.compose:compose-bom:2026.06.00"))
-    implementation(platform("com.google.firebase:firebase-bom:34.15.0"))
-    implementation("androidx.activity:activity-compose:1.13.0")
+    implementation(platform("androidx.compose:compose-bom:2024.10.00"))
+    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
+    implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.compose.ui:ui")
@@ -52,6 +53,7 @@ dependencies {
     implementation("com.google.firebase:firebase-auth")
     implementation("com.google.firebase:firebase-firestore")
     implementation("com.google.mlkit:text-recognition:16.0.1")
+    implementation("com.google.guava:guava:33.3.1-android")
     implementation("androidx.work:work-runtime-ktx:2.11.2")
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

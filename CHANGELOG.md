@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.0.6
+
+- Reworked transaction entry into a full-screen dark navy/yellow editor with an amount card and bottom category grid inspired by the provided reference.
+- Let scanned and pending slips open the same editor before saving so users can confirm name, amount, category, and note.
+- Added a home slip-sync header with sync state, pending count, picker, resync, and review actions.
+- Added app-entry slip sync when scan consent and photo permission are already available.
+- Added `UI_AND_SLIP_FLOW_NOTES.md` to document the intended UI and slip flow for future maintainers.
+
 ## 2.0.5
 
 - Check GitHub Releases and show the update dialog before phone sign-in as well as after entering the app.

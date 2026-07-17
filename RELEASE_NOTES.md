@@ -1,38 +1,8 @@
-# RubJai v2.0.5
+# RubJai v2.0.6
 
-- แก้ popup อัปเดตให้ตรวจและแสดงได้ตั้งแต่หน้าสมัคร/เข้าสู่ระบบ โดยไม่ต้องผ่าน OTP ก่อน
-
-## RubJai v2.0.4
-
-- แก้การสร้าง APK ให้สร้างค่าเวอร์ชันสำหรับแสดงบนหน้าสมัคร/เข้าสู่ระบบได้สำเร็จ
-
-## RubJai v2.0.3
-
-- เพิ่มปุ่มเข้าใช้แบบทดลองโดยไม่ต้องรับ OTP เพื่อดูและทดสอบหน้าด้านในขณะตั้งค่า Firebase Billing
-
-## RubJai v2.0.2
-
-- แสดงเลขเวอร์ชันและ version code ของ APK ที่มุมขวาบนของหน้าสมัคร/เข้าสู่ระบบ เพื่อให้ตรวจสอบรุ่นที่ติดตั้งได้ทันที
-
-## RubJai v2.0.1
-
-- ปรับโลโก้หมีและกระเป๋าให้ใช้พื้นหลังสีเขียวมรกตสีเดียวเต็มภาพ ไม่มีกรอบขาวหรือเขียวสองเฉด
-- ปรับหน้าต้อนรับ การสมัครด้วยเบอร์โทรศัพท์และ OTP รวมถึงการเปลี่ยนหน้าให้ลื่นไหลขึ้น
-- ขยายการตรวจสลิปจากหลายแอปธนาคาร/กระเป๋าเงิน และเริ่มข้อมูลการใช้งานใหม่สำหรับโครงสร้างรุ่น 2
-- ปรับความปลอดภัยของข้อมูลผู้ใช้ โดยแต่ละบัญชีรีเซ็ตหรือลบได้เฉพาะข้อมูลของตัวเอง
-
-## สิ่งที่ควรรู้
-
-- รูปสลิปถูกอ่านภายในเครื่องและไม่ถูกอัปโหลดไป Firebase
-- การยืนยัน OTP ต้องตั้งค่า Phone Authentication, SHA-1 และ SHA-256 ใน Firebase ให้ตรงกับ APK
-
-## ประวัติรุ่น 2.0.0
-
-- สมัครและเข้าใช้ด้วยเบอร์มือถือ + SMS OTP
-- หน้าต้อนรับ ข้อตกลง ความเป็นส่วนตัว และสิทธิ์รูปแบบใหม่
-- โลโก้ “น้องรับจ่าย” และโทนสีใหม่ของ RubJai
-- แก้ไขหรือลบรายการและหนี้ได้ พร้อมกันสลิปซ้ำ
-- ไม่อัปโหลดหรือเก็บรูปสลิปและข้อความ OCR เต็ม
-- อ่านยอด ชื่อ วันเวลา และเปิดดูรูปต้นฉบับจากเครื่องได้
-- หมวดให้ผู้ใช้เลือกหรือเพิ่มเองในหน้ารายละเอียด
-- รีเซ็ตข้อมูลหรือลบบัญชีของตัวเองได้
+- Reworked the transaction entry screen into a dark navy/yellow full-screen flow with expense, income, and transfer-style tabs.
+- Added a large amount card and a bottom category picker with icon grid styling based on the provided reference.
+- Added a home slip-sync header that shows current sync state, pending slip count, manual picker, resync, and review actions.
+- Changed pending scanned slips so they open the editor before saving, allowing users to confirm name, amount, category, and note.
+- Added automatic slip sync on app entry when scan consent and photo permission are already available.
+- Updated build notes and maintainer documentation in `UI_AND_SLIP_FLOW_NOTES.md`.
