@@ -57,8 +57,8 @@ Read these files before code changes:
    - On Windows with a connected phone and ADB available, run `powershell -ExecutionPolicy Bypass -File scripts\local-device-smoke.ps1`.
    - Compare the home screen, add/edit screen, category picker, pending slip review, full-screen slip image, and update popup against the latest user screenshots/video.
    - Do not release a UI change that has only been checked by static code search when a device/emulator is available.
-   - GitHub Actions runs `scripts/emulator-smoke.sh` on an Android emulator and uploads screenshots for the main no-OTP trial flow.
+   - GitHub Actions intentionally does not run Android emulator smoke tests. GitHub is used for privacy/static/parser/layout gates and APK packaging only; emulator/device UI smoke tests must run locally on this machine to avoid slow CI loops and private slip exposure.
 
 ## Release Rule
 
-Do not push a release tag until all required checks and the APK build pass. GitHub Release notes must stay English. In-app update notes must stay Thai.
+Do not push a release tag until all required checks, local device/emulator review when available, and the APK build pass. GitHub Release notes must stay English. In-app update notes must stay Thai.

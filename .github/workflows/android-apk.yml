@@ -53,22 +53,6 @@ jobs:
           else
             gradle :app:assembleDebug --build-cache --parallel --stacktrace
           fi
-      - name: Android emulator smoke UI
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 29
-          target: default
-          arch: x86_64
-          profile: pixel_2
-          emulator-boot-timeout: 1200
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none -memory 1536
-          script: bash scripts/emulator-smoke.sh
-      - name: Upload emulator smoke screenshots
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: RubJai-emulator-smoke-${{ github.sha }}
-          path: build/emulator-smoke
       - name: Package artifact
         run: |
           APK=$(find app/build/outputs/apk -name '*.apk' | head -1)

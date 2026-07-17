@@ -6,8 +6,7 @@
 - Expanded slip sync to scan up to the last 31 days while keeping real-time MediaStore sync for newly added images while the app is open.
 - Bumped the auto-slip parser key so today's images can be rescanned with the safer recipient rules.
 - Added the no-admin layout check to GitHub Actions before the APK build.
-- Added a GitHub Actions Android emulator smoke test that installs the APK, enters trial mode, opens home, add transaction, and category picker, then uploads screenshots.
-- Expanded emulator smoke coverage to account, profile, and debt-planner pages.
+- Moved emulator/device UI smoke testing out of GitHub Actions and into the local Windows flow so GitHub only handles fast gates and APK packaging.
 - Replaced the RubJai mark with a more minimal wallet logo.
 - Added a privacy gate so real slip images, screenshots, videos, local Downloads paths, and real slip references are not committed to GitHub.
 - Added a Windows local device smoke script for no-admin UI checks when a phone/ADB is available, and tuned the CI emulator to a lighter Android image.
