@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -71,10 +70,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -453,31 +449,16 @@ private fun OnboardingVisual(page: Int) {
 }
 
 @Composable
-private fun RubJaiTopBar(name: String, profile: () -> Unit) {
-    Surface(color = RubCoral) {
-        Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            androidx.compose.foundation.Image(painterResource(R.drawable.rubjai_mascot), null, Modifier.size(44.dp), contentScale = ContentScale.Crop)
-            Spacer(Modifier.width(10.dp))
-            Column { Text("น้องรับจ่าย", color = RubInk, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black); Text(if (name.isBlank()) "พร้อมช่วยดูแลเงินแล้ว" else "สวัสดี $name", style = MaterialTheme.typography.bodySmall, color = RubInk.copy(alpha = .75f)) }
-            Spacer(Modifier.weight(1f)); IconButton(onClick = profile) { Icon(Icons.Default.AccountCircle, "บัญชีของฉัน", tint = RubInk) }
-        }
-    }
-}
-
-@Composable
 private fun UserHub(name: String, entryCount: Int, editProfile: () -> Unit, debts: () -> Unit, home: () -> Unit, permission: () -> Unit) {
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Box(Modifier.fillMaxWidth().height(250.dp).background(Brush.verticalGradient(listOf(RubCoral, RubCream)), RoundedCornerShape(28.dp))) {
-            Column(Modifier.padding(24.dp)) {
-                Text("สวัสดี ${name.ifBlank { "คุณ" }}", color = RubInk, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black)
-                Text("ข้อมูลและการตั้งค่าของคุณ", color = RubInk.copy(alpha = .72f))
-            }
-            androidx.compose.foundation.Image(painterResource(R.drawable.rubjai_mascot), null, Modifier.align(Alignment.BottomEnd).padding(12.dp).size(150.dp))
-        }
-        Card(colors = CardDefaults.cardColors(containerColor = RubPanel), shape = RoundedCornerShape(24.dp)) {
-            Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("ภาพรวมบัญชี", color = RubCream, fontWeight = FontWeight.Bold)
-                Text("$entryCount รายการที่บันทึกไว้", color = RubMint, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black)
+    Column(Modifier.fillMaxWidth().background(RubEntryNavy).padding(top = 18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Surface(Modifier.fillMaxWidth().heightIn(min = 210.dp), color = RubEntryYellow, shape = RoundedCornerShape(topStart = 18.dp, bottomStart = 18.dp)) {
+            Box(Modifier.fillMaxSize()) {
+                Column(Modifier.padding(start = 28.dp, top = 28.dp, end = 140.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("บัญชีของฉัน", color = RubEntryNavy, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black)
+                    Text("สวัสดี ${name.ifBlank { "คุณ" }}", color = RubEntryNavy.copy(alpha = .82f), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text("$entryCount รายการที่บันทึกไว้", color = RubBlue, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black)
+                }
+                androidx.compose.foundation.Image(painterResource(R.drawable.rubjai_mascot), null, Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = 8.dp).size(138.dp))
             }
         }
         UserHubRow(Icons.Default.AccountCircle, "ข้อมูลส่วนตัวและบัญชี", editProfile)
@@ -489,9 +470,9 @@ private fun UserHub(name: String, entryCount: Int, editProfile: () -> Unit, debt
 
 @Composable
 private fun UserHubRow(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, action: () -> Unit) {
-    Card(Modifier.fillMaxWidth().clickable(onClick = action), colors = CardDefaults.cardColors(containerColor = RubPanel), shape = RoundedCornerShape(20.dp)) {
+    Card(Modifier.fillMaxWidth().clickable(onClick = action), colors = CardDefaults.cardColors(containerColor = RubEntryCard), shape = RoundedCornerShape(8.dp)) {
         Row(Modifier.fillMaxWidth().padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, null, tint = RubMint, modifier = Modifier.size(30.dp)); Spacer(Modifier.width(16.dp)); Text(title, Modifier.weight(1f), color = RubCream, fontWeight = FontWeight.SemiBold); Text("›", color = RubCoral, style = MaterialTheme.typography.headlineSmall)
+            Icon(icon, null, tint = RubBlue, modifier = Modifier.size(30.dp)); Spacer(Modifier.width(16.dp)); Text(title, Modifier.weight(1f), color = Color.White, fontWeight = FontWeight.SemiBold); Text("›", color = RubEntryYellow, style = MaterialTheme.typography.headlineSmall)
         }
     }
 }
@@ -675,98 +656,6 @@ private fun HomeTimelineRow(item: MoneyTransaction, onOpen: (MoneyTransaction) -
         }
         Text(moneyPlain(item.amount), color = Color.White, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
     }
-}
-
-@Composable
-private fun HomeActions(busy: Boolean, syncing: Boolean, pending: Int, scan: () -> Unit, sync: () -> Unit, review: () -> Unit, income: () -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Surface(Modifier.fillMaxWidth(), color = RubEntryNavy, shape = RoundedCornerShape(8.dp), border = BorderStroke(1.dp, RubBlue.copy(alpha = 0.55f))) {
-            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Surface(Modifier.size(48.dp), color = RubEntryCard, shape = RoundedCornerShape(8.dp), border = BorderStroke(1.dp, RubBlue.copy(alpha = 0.35f))) {
-                        Icon(Icons.Default.ReceiptLong, null, tint = RubBlue, modifier = Modifier.padding(11.dp))
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text("โหลดสลิปวันนี้", color = Color.White, fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            when {
-                                syncing -> "กำลังซิงค์รูปวันนี้"
-                                pending > 0 -> "พบ $pending รายการ รอตรวจ"
-                                else -> "ซิงค์อัตโนมัติเมื่อเปิดแอพถ้าอนุญาตแล้ว"
-                            },
-                            color = RubEntryMuted,
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                    }
-                    if (pending > 0) Surface(color = RubRed, shape = RoundedCornerShape(14.dp)) { Text("$pending", Modifier.padding(horizontal = 10.dp, vertical = 4.dp), color = Color.White, fontWeight = FontWeight.Black) }
-                }
-                if (syncing) LinearProgressIndicator(Modifier.fillMaxWidth(), color = RubBlue, trackColor = Color.White.copy(alpha = 0.15f))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Button(onClick = scan, enabled = !busy, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(8.dp), colors = ButtonDefaults.buttonColors(containerColor = RubBlue, contentColor = Color.White)) { Icon(Icons.Default.ImageSearch, null); Spacer(Modifier.width(6.dp)); Text(if (busy) "กำลังอ่าน" else "เลือกสลิป") }
-                    OutlinedButton(onClick = sync, enabled = !syncing, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(8.dp), border = BorderStroke(1.dp, RubBlue)) { Text(if (syncing) "กำลังซิงค์" else "ซิงค์ใหม่", color = RubBlue, fontWeight = FontWeight.Bold) }
-                }
-                if (pending > 0) Button(onClick = review, colors = ButtonDefaults.buttonColors(containerColor = RubEntryYellow, contentColor = RubEntryNavy), modifier = Modifier.fillMaxWidth().height(46.dp), shape = RoundedCornerShape(8.dp)) { Text("ตรวจรายการรอบันทึก", fontWeight = FontWeight.Black) }
-            }
-        }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            OutlinedButton(onClick = income, modifier = Modifier.weight(1f), border = BorderStroke(1.dp, RubMint)) { Icon(Icons.Default.Add, null, tint = RubMint); Spacer(Modifier.width(4.dp)); Text("เพิ่มรายรับ", color = RubMint) }
-            OutlinedButton(onClick = sync, enabled = !syncing, modifier = Modifier.weight(1f), border = BorderStroke(1.dp, RubCoral)) { Icon(Icons.Default.ArrowUpward, null, tint = RubCoral); Spacer(Modifier.width(4.dp)); Text("เพิ่มรายจ่าย", color = RubCoral) }
-        }
-    }
-}
-
-@Composable
-private fun KPlusSyncStatus(syncing: Boolean, scanned: Int, consented: Boolean, revoke: () -> Unit) {
-    if (!syncing && !consented) return
-    Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F1FF))) {
-        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            if (syncing) { Text("น้องรับจ่ายกำลังหาสลิปธนาคาร/วอลเล็ต", fontWeight = FontWeight.Bold); LinearProgressIndicator(Modifier.fillMaxWidth()); Text(if (scanned == 0) "กำลังเตรียมรูป…" else "ตรวจแล้ว $scanned รูป • ยังไม่บันทึกรายการ", style = MaterialTheme.typography.bodySmall) }
-            else Row(verticalAlignment = Alignment.CenterVertically) { Text("อนุญาตสแกนเมื่อคุณกดเท่านั้น", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall); TextButton(onClick = revoke) { Text("ยกเลิกสิทธิ์") } }
-        }
-    }
-}
-
-@Composable
-private fun TransactionDetailDialog(item: MoneyTransaction, onDismiss: () -> Unit, onUpdate: (DraftTransaction) -> Unit, onDelete: () -> Unit) {
-    val context = LocalContext.current
-    var amount by remember(item.id) { mutableStateOf(item.amount.toString()) }
-    var title by remember(item.id) { mutableStateOf(item.title) }
-    var category by remember(item.id) { mutableStateOf(item.category) }
-    var remark by remember(item.id) { mutableStateOf(item.remark) }
-    var occurredAt by remember(item.id) { mutableStateOf(item.occurredAt) }
-    var confirmDelete by remember { mutableStateOf(false) }
-    var showSlip by remember { mutableStateOf(false) }
-    val slipUri = remember(item.id) { LocalSlipLinkStore.get(context, item.id) }
-    val categories = remember(item.type) { CategoryStore.all(context, item.type == "INCOME") }
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Surface(Modifier.fillMaxSize(), color = Color(0xFFFFF8EE)) {
-            Column(Modifier.fillMaxSize().statusBarsPadding()) {
-                Surface(color = Color(0xFFFFF3DF)) { Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = onDismiss) { Icon(Icons.Default.ArrowBack, "กลับ", tint = Color(0xFF0B5D5B)) }
-                    Text("รายละเอียดรายการ", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge, color = Color(0xFF0B5D5B), fontWeight = FontWeight.Black)
-                    IconButton(onClick = { confirmDelete = true }) { Icon(Icons.Default.Delete, "ลบรายการ", tint = MaterialTheme.colorScheme.error) }
-                } }
-                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(item.type == "EXPENSE", {}, { Text("รายจ่าย") }, modifier = Modifier.weight(1f))
-                    FilterChip(item.type == "INCOME", {}, { Text("รายรับ") }, modifier = Modifier.weight(1f))
-                    FilterChip(false, {}, { Text("ย้ายเงิน") }, enabled = false, modifier = Modifier.weight(1f))
-                }
-                LazyColumn(Modifier.weight(1f).padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
-                    item { OutlinedTextField(occurredAt, { occurredAt = it.take(50) }, label = { Text("วันที่/เวลา") }, modifier = Modifier.fillMaxWidth(), leadingIcon = { Icon(Icons.Default.ReceiptLong, null) }) }
-                    item { Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF0B5D5B)), shape = RoundedCornerShape(24.dp)) { OutlinedTextField(amount, { amount = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("จำนวนเงิน") }, suffix = { Text("บาท") }, textStyle = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold), singleLine = true, modifier = Modifier.fillMaxWidth().padding(14.dp), colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedLabelColor = Color(0xFF76C7B7), unfocusedLabelColor = Color(0xFFB6DAD3), focusedBorderColor = Color(0xFF76C7B7), unfocusedBorderColor = Color(0xFF76C7B7), focusedSuffixColor = Color.White, unfocusedSuffixColor = Color.White)) } }
-                    item { OutlinedTextField(title, { title = it.take(200) }, label = { Text("ชื่อผู้รับ/ชื่อรายการ") }, modifier = Modifier.fillMaxWidth(), singleLine = true) }
-                    item { Card(colors = CardDefaults.cardColors(containerColor = Color.White)) { Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Text("เลือกหมวด / แท็ก", color = Color(0xFF0B5D5B), fontWeight = FontWeight.Bold); Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) { categories.forEach { FilterChip(category == it, { category = it }, { Text(it) }) } }; Text("เพิ่มหรือลบหมวดได้จากหน้าโปรไฟล์", style = MaterialTheme.typography.bodySmall, color = Color.Gray) } } }
-                    item { OutlinedTextField(remark, { remark = it.take(500) }, label = { Text("เพิ่มโน้ต") }, modifier = Modifier.fillMaxWidth(), minLines = 3) }
-                    if (slipUri.isNotBlank()) item { SlipSourceCard(slipUri, title, occurredAt) { showSlip = true } }
-                    if (item.slipFingerprint.isNotBlank()) item { Text("รูปสลิปยังอยู่ในเครื่องเดิมและไม่ถูกอัปโหลด หากลบหรือย้ายรูป แอปจะเปิดดูไม่ได้", style = MaterialTheme.typography.bodySmall, color = Color.Gray) }
-                }
-                Surface(color = Color.White, tonalElevation = 4.dp) { Button(enabled = amount.toDoubleOrNull()?.let { it > 0 } == true, onClick = { onUpdate(DraftTransaction(amount, title, TransactionType.valueOf(item.type), item.source, category = category, remark = remark, occurredAt = occurredAt, slipFingerprint = item.slipFingerprint)) }, modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(16.dp).height(54.dp), shape = RoundedCornerShape(20.dp)) { Icon(Icons.Default.Edit, null); Spacer(Modifier.width(6.dp)); Text("บันทึกการแก้ไข", fontWeight = FontWeight.Bold) } }
-            }
-        }
-    }
-    if (confirmDelete) AlertDialog(onDismissRequest = { confirmDelete = false }, title = { Text("ลบรายการนี้?") }, text = { Text("ยอดและข้อมูลรายการจะถูกลบจากบัญชีของคุณ") }, confirmButton = { Button(onClick = onDelete, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)) { Text("ลบ") } }, dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("ยกเลิก") } })
-    if (showSlip) FullScreenSlipDialog(slipUri) { showSlip = false }
 }
 
 @Composable
@@ -1002,18 +891,6 @@ private fun CategoryManagerDialog(close: () -> Unit) {
     } }, confirmButton = { Button(onClick = close) { Text("เสร็จ") } })
 }
 
-@Composable
-private fun SummaryCard(entries: List<MoneyTransaction>) {
-    val income = entries.filter { it.type == "INCOME" }.sumOf { it.amount }
-    val expense = entries.filter { it.type == "EXPENSE" }.sumOf { it.amount }
-    Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = RubPanel)) {
-        Column(Modifier.fillMaxWidth().padding(22.dp)) {
-            Text("คงเหลือ", color = RubMuted); Text(money(income - expense), color = RubCream, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(16.dp)); Row { Text("รับ  ${money(income)}", color = RubMint); Spacer(Modifier.weight(1f)); Text("จ่าย  ${money(expense)}", color = RubCoral) }
-        }
-    }
-}
-
 @Composable private fun PendingSlipDialog(items: List<PendingSlip>, onClose: () -> Unit, onReview: (PendingSlip) -> Unit, onReject: (PendingSlip) -> Unit) {
     AlertDialog(onDismissRequest = onClose, title = { Text("สลิปรอตรวจ") }, text = {
         if (items.isEmpty()) Text("ไม่มีรายการรอตรวจ") else LazyColumn(Modifier.fillMaxWidth().heightIn(max = 460.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1043,44 +920,6 @@ private fun List<MoneyTransaction>.filterFor(period: EntryPeriod, kind: EntryKin
         EntryPeriod.MONTH -> calendar.apply { set(Calendar.DAY_OF_MONTH, 1); set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0) }.time
     }
     return filter { item -> (threshold == null || item.createdAt?.let { !it.before(threshold) } == true) && when (kind) { EntryKind.ALL -> true; EntryKind.INCOME -> item.type == "INCOME"; EntryKind.EXPENSE -> item.type == "EXPENSE" } }
-}
-
-@Composable private fun EntryFilters(period: EntryPeriod, kind: EntryKind, setPeriod: (EntryPeriod) -> Unit, setKind: (EntryKind) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) { EntryPeriod.entries.forEach { FilterChip(selected = period == it, onClick = { setPeriod(it) }, label = { Text(it.label) }) } }
-        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) { EntryKind.entries.forEach { FilterChip(selected = kind == it, onClick = { setKind(it) }, label = { Text(it.label) }) } }
-    }
-}
-
-@Composable private fun SpendingOverview(entries: List<MoneyTransaction>, period: EntryPeriod) {
-    val groups = entries.groupBy { it.category.ifBlank { "ใช้จ่ายทั่วไป" } }.mapValues { it.value.sumOf(MoneyTransaction::amount) }.entries.sortedByDescending { it.value }
-    val total = groups.sumOf { it.value }
-    val colors = listOf(Color(0xFF0B9B73), Color(0xFFFF8A65), Color(0xFF5C6BC0), Color(0xFFFFC107), Color(0xFF26A69A), Color(0xFFAB47BC))
-    val description = if (total > 0) "ภาพรวมรายจ่าย${period.label} รวม ${money(total)} จำนวน ${groups.size} หมวด" else "ยังไม่มีรายจ่าย${period.label}"
-    Card(colors = CardDefaults.cardColors(containerColor = Color.White)) {
-        Column(Modifier.fillMaxWidth().padding(18.dp).semantics { contentDescription = description }, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("ภาพรวมรายจ่าย • ${period.label}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            if (total <= 0) Text("ยังไม่มีรายจ่ายในช่วงนี้", color = Color.Gray)
-            else Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(18.dp)) {
-                Canvas(Modifier.size(128.dp)) {
-                    drawArc(Color(0xFFE8EEF3), -90f, 360f, false, style = Stroke(22.dp.toPx()))
-                    var start = -90f
-                    groups.forEachIndexed { index, group -> val sweep = (group.value / total * 360).toFloat(); drawArc(colors[index % colors.size], start, sweep, false, style = Stroke(22.dp.toPx())); start += sweep }
-                }
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) { Text(money(total), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold); groups.take(5).forEachIndexed { index, group -> Row(verticalAlignment = Alignment.CenterVertically) { Surface(Modifier.size(12.dp), shape = RoundedCornerShape(50), color = colors[index % colors.size]) {}; Spacer(Modifier.width(8.dp)); Text(group.key, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall); Text(money(group.value), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold) } } }
-            }
-        }
-    }
-}
-
-@Composable private fun EntryRow(item: MoneyTransaction, open: () -> Unit) { Card(Modifier.fillMaxWidth().clickable(onClick = open), colors = CardDefaults.cardColors(containerColor = Color.White)) { Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) { Surface(Modifier.size(42.dp), shape = RoundedCornerShape(14.dp), color = if (item.type == "INCOME") Color(0xFFE1F7ED) else Color(0xFFFFE8E5)) { Icon(if (item.type == "INCOME") Icons.Default.Add else Icons.Default.ReceiptLong, null, Modifier.padding(10.dp), tint = if (item.type == "INCOME") Color(0xFF0B9B73) else Color(0xFFD84A3A)) }; Spacer(Modifier.width(12.dp)); Column(Modifier.weight(1f)) { Text(item.title.ifBlank { item.category.ifBlank { "ไม่ระบุรายการ" } }, fontWeight = FontWeight.SemiBold); Text(listOf(item.category, item.occurredAt).filter(String::isNotBlank).joinToString(" • "), style = MaterialTheme.typography.bodySmall, color = Color.Gray) }; Text((if (item.type == "INCOME") "+" else "-") + money(item.amount), color = if (item.type == "INCOME") Color(0xFF0B9B73) else Color(0xFFD84A3A), fontWeight = FontWeight.Bold) } } }
-
-@Composable private fun QuickOverview(entries: List<MoneyTransaction>) {
-    val top = entries.groupBy { it.category }.maxByOrNull { it.value.sumOf(MoneyTransaction::amount) }?.key ?: "ยังไม่มีข้อมูล"
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        Card(Modifier.weight(1f), colors = CardDefaults.cardColors(containerColor = Color.White)) { Column(Modifier.padding(16.dp)) { Text("รายการเดือนนี้", color = Color.Gray); Text("${entries.size} รายการ", fontWeight = FontWeight.Bold) } }
-        Card(Modifier.weight(1f), colors = CardDefaults.cardColors(containerColor = Color.White)) { Column(Modifier.padding(16.dp)) { Text("หมวดหลัก", color = Color.Gray); Text(top, fontWeight = FontWeight.Bold, maxLines = 1) } }
-    }
 }
 
 @Composable

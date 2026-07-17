@@ -16,6 +16,20 @@ if (!main.includes("ExtendedFloatingActionButton(") || !main.includes('Text("จ
 if (!main.includes("SlipSourceCard(initial.slipUri")) fail("Transaction editor must show the source slip card when a slip image is available.");
 if (!main.includes("FullScreenSlipDialog(initial.slipUri")) fail("Transaction editor must allow opening the source slip full screen.");
 
+for (const oldSymbol of [
+  "fun RubJaiTopBar",
+  "fun HomeActions",
+  "fun KPlusSyncStatus",
+  "fun TransactionDetailDialog",
+  "fun SummaryCard",
+  "fun EntryFilters",
+  "fun SpendingOverview",
+  "fun EntryRow",
+  "fun QuickOverview",
+]) {
+  if (main.includes(oldSymbol)) fail(`Old UI implementation must not remain in MainActivity: ${oldSymbol}`);
+}
+
 const scaffoldBlock = main.match(/Scaffold\([\s\S]*?\n\s*\) \{ padding ->/);
 if (!scaffoldBlock) fail("Could not locate main Scaffold block.");
 else if (scaffoldBlock[0].includes("RubJaiTopBar(")) fail("Old coral top bar must not appear on the redesigned home screen.");

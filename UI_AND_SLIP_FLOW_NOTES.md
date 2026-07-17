@@ -140,10 +140,17 @@ Required release steps:
    - `node scripts/check-slip-samples.js`
    - `node scripts/check-ui-flow.js`
    - `gradle :app:assembleDebug --build-cache --parallel --stacktrace`
-3. Commit and push to `main`.
-4. Tag the release, for example `v3.0.0`, and push the tag.
-5. Wait for GitHub Actions to pass.
-6. Confirm GitHub Release assets include:
+3. After every UI or slip-parser edit, verify the changed behavior against the reference screenshots/video before committing:
+   - home timeline still uses the dark/yellow RubJai redesign
+   - transaction entry still uses the dark full-screen editor
+   - category picker still uses the white bottom sheet with circular icons
+   - slip sync still stays inline and does not show a completion popup
+   - sample slips still return recipient, amount, date, and time
+4. Do not request a release tag or push a release until the checks and APK build pass.
+5. Commit and push to `main`.
+6. Tag the release, for example `v3.0.0`, and push the tag.
+7. Wait for GitHub Actions to pass.
+8. Confirm GitHub Release assets include:
    - APK
    - SHA-256
    - `APP_UPDATE_NOTES_TH.md`
