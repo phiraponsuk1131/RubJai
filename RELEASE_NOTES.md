@@ -1,7 +1,12 @@
-# RubJai v3.0.1
+# RubJai v3.0.2
 
-- Fixed the redesigned home timeline so the yellow month card keeps enough width on phones and Thai labels no longer collapse into vertical text.
-- Replaced the old square mascot usage with a new RubJai wallet mark and updated the launcher foreground to use the new mark.
-- Kept source slip images linked locally from the device when opening or editing saved transactions.
-- Added source-slip previews inside the pending slip review queue before opening the full editor.
-- Strengthened the UI-flow gate to catch the fixed-width rail regression, old mascot usage, missing local slip links, and version mismatch before APK build.
+- Fixed the home slip-sync band so pending-slip text no longer collapses into vertical Thai characters on narrow phones.
+- Added a no-admin desktop layout check that renders a 360dp SVG preview and fails when the home sync text column is too narrow.
+- Improved slip recipient validation so noisy OCR strings such as Latin accented garbage are not accepted as recipient names.
+- Expanded slip sync to scan up to the last 31 days while keeping real-time MediaStore sync for newly added images while the app is open.
+- Bumped the auto-slip parser key so today's images can be rescanned with the safer recipient rules.
+- Added the no-admin layout check to GitHub Actions before the APK build.
+- Added a GitHub Actions Android emulator smoke test that installs the APK, enters trial mode, opens home, add transaction, and category picker, then uploads screenshots.
+- Expanded emulator smoke coverage to account, profile, and debt-planner pages.
+- Replaced the RubJai mark with a more minimal wallet logo.
+- Added a privacy gate so real slip images, screenshots, videos, local Downloads paths, and real slip references are not committed to GitHub.

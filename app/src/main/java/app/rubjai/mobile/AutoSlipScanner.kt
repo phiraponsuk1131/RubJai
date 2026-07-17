@@ -84,6 +84,7 @@ object KPlusSyncManager {
     private const val WORK = "rubjai_kplus_sync_now"
     private const val PREFS = "auto_kplus_scan"
     private const val MIN_REALTIME_GAP_MS = 3_000L
+    const val MAX_LOOKBACK_DAYS = 31
     private var realtimeObserver: ContentObserver? = null
     private var lastRealtimeSyncAt = 0L
 
@@ -118,7 +119,7 @@ object KPlusSyncManager {
 }
 
 class KPlusScanWorker(context: Context, params: WorkerParameters) : Worker(context, params) {
-    private val parserVersion = "slip-v3.0.1-qr-complete-1"
+    private val parserVersion = "slip-v3.0.2-month-readable-name-1"
     private val kPlusReference = Regex("[0-9]{10,}(?:CPM|DQR|DTF)[0-9]+", RegexOption.IGNORE_CASE)
     private val genericReference = Regex("(?i)(?:เลขที่รายการ|reference|transaction id|รหัสอ้างอิง)[^\\n]{0,50}[A-Z0-9-]{6,}")
     private val supportedApps = listOf(
@@ -129,9 +130,21 @@ class KPlusScanWorker(context: Context, params: WorkerParameters) : Worker(conte
 
     override fun doWork(): Result {
         if (!KPlusSyncManager.hasConsent(applicationContext)) return Result.success()
-        val startToday = Calendar.getInstance().apply { set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0) }
-        val startTomorrow = (startToday.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, 1) }
-        val since = startToday.timeInMillis / 1000
+        val startWindow = Calendar.getInstance().apply {
+            add(Calendar.DAY_OF_YEAR, -(KPlusSyncManager.MAX_LOOKBACK_DAYS - 1))
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val startTomorrow = Calendar.getInstance().apply {
+            add(Calendar.DAY_OF_YEAR, 1)
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val since = startWindow.timeInMillis / 1000
         val before = startTomorrow.timeInMillis / 1000
         val projection = arrayOf(MediaStore.Images.Media._ID, MediaStore.Images.Media.DATE_ADDED)
         val selection = "${MediaStore.Images.Media.DATE_ADDED} >= ? AND ${MediaStore.Images.Media.DATE_ADDED} < ?"
@@ -145,7 +158,7 @@ class KPlusScanWorker(context: Context, params: WorkerParameters) : Worker(conte
                 val idColumn = it.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
                 val dateColumn = it.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_ADDED)
                 var scanned = 0
-                while (it.moveToNext() && scanned < 200) {
+                while (it.moveToNext() && scanned < 1000) {
                     val id = it.getLong(idColumn)
                     val mediaKey = "$parserVersion:$id"
                     if (PendingSlipStore.isProcessed(applicationContext, mediaKey)) continue

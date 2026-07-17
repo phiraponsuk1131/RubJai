@@ -9,8 +9,8 @@ function fail(message) {
   process.exitCode = 1;
 }
 
-if (!build.includes('versionName = "3.0.1"')) fail("Expected app versionName 3.0.1 for the responsive UI/logo fix release.");
-if (!build.includes("versionCode = 20")) fail("Expected app versionCode 20 for v3.0.1.");
+if (!build.includes('versionName = "3.0.2"')) fail("Expected app versionName 3.0.2 for the slip/UI hotfix release.");
+if (!build.includes("versionCode = 21")) fail("Expected app versionCode 21 for v3.0.2.");
 if (!main.includes("HomeReferenceScreen(")) fail("Home screen must render HomeReferenceScreen.");
 if (!main.includes("HomeSlipSyncBand(")) fail("Slip sync must be displayed inline on the home timeline.");
 if (!main.includes("HomeTimelineRow(")) fail("Home timeline rows with category icons are required.");

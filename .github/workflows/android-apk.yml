@@ -31,10 +31,16 @@ jobs:
         run: if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/rubjai-release.jks"; fi
       - name: Check Thai text integrity
         run: node scripts/check-text-integrity.js
+      - name: Check private slip data is not committed
+        run: node scripts/check-privacy.js
       - name: Check slip parser samples
         run: node scripts/check-slip-samples.js
+      - name: Check slip sync window
+        run: node scripts/check-slip-sync-window.js
       - name: Check redesigned UI flow
         run: node scripts/check-ui-flow.js
+      - name: Check no-admin UI layout preview
+        run: node scripts/check-ui-layout.js
       - name: Build APK (no tests)
         env:
           SIGNING_STORE_FILE: "${{ runner.temp }}/rubjai-release.jks"
@@ -47,6 +53,20 @@ jobs:
           else
             gradle :app:assembleDebug --build-cache --parallel --stacktrace
           fi
+      - name: Android emulator smoke UI
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          script: bash scripts/emulator-smoke.sh
+      - name: Upload emulator smoke screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: RubJai-emulator-smoke-${{ github.sha }}
+          path: build/emulator-smoke
       - name: Package artifact
         run: |
           APK=$(find app/build/outputs/apk -name '*.apk' | head -1)

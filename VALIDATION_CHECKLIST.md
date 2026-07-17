@@ -19,15 +19,21 @@ Read these files before code changes:
    - Run `node scripts/check-text-integrity.js`
    - Must pass with no mojibake or replacement characters.
 
-2. Slip sample parsing
+2. Privacy
+   - Run `node scripts/check-privacy.js`
+   - Must pass before commit.
+   - Do not commit real slip images, screenshots, videos, local Downloads paths, real transaction references, or other private slip data.
+   - Parser tests must use synthetic names and references that preserve format only.
+
+3. Slip sample parsing
    - Run `node scripts/check-slip-samples.js`
    - Must extract recipient/name, amount, date, and time from the sample K PLUS / Dime cases.
    - QR data is primary. OCR is fallback/context only.
 
-3. Redesigned UI flow guard
+4. Redesigned UI flow guard
    - Run `node scripts/check-ui-flow.js`
    - Must confirm:
-     - app version is `3.0.1`
+     - app version is `3.0.2`
      - home renders `HomeReferenceScreen`
      - the home rail is responsive, not fixed at the broken wide value
      - the new RubJai mark is used instead of the old square mascot
@@ -37,14 +43,20 @@ Read these files before code changes:
      - pending slip review previews the source slip image from the device
      - editing a saved transaction preserves its local slip image link
 
-4. APK build
+5. APK build
    - Run `gradle :app:assembleDebug --no-build-cache --no-parallel --stacktrace`
    - If Windows file locks appear under the local Android SDK, rerun outside the sandbox/permission wrapper.
 
-5. Visual/device review
+6. No-admin desktop layout check
+   - Run `node scripts/check-ui-layout.js`
+   - Open `build/ui-preview/home-360.svg` to inspect the generated 360dp home preview on the computer.
+   - This does not replace a real device test, but it catches the narrow-layout text collapse before APK build.
+
+7. Visual/device review
    - If a device or emulator is connected, install the APK, open the app, and capture screenshots.
    - Compare the home screen, add/edit screen, category picker, pending slip review, full-screen slip image, and update popup against the latest user screenshots/video.
    - Do not release a UI change that has only been checked by static code search when a device/emulator is available.
+   - GitHub Actions runs `scripts/emulator-smoke.sh` on an Android emulator and uploads screenshots for the main no-OTP trial flow.
 
 ## Release Rule
 

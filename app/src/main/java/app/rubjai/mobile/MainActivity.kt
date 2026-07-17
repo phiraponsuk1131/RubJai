@@ -233,7 +233,7 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
         while (true) {
             val info = withContext(Dispatchers.IO) { runCatching { KPlusSyncManager.workInfo(context, workId) }.getOrNull() }
             when (info?.state) {
-                androidx.work.WorkInfo.State.RUNNING -> { syncing = true; syncScanned = info.progress.getInt("scanned", 0); syncStatusText = if (syncScanned > 0) "ตรวจแล้ว $syncScanned รูป" else "กำลังค้นหาสลิปใหม่" }
+                androidx.work.WorkInfo.State.RUNNING -> { syncing = true; syncScanned = info.progress.getInt("scanned", 0); syncStatusText = if (syncScanned > 0) "ตรวจแล้ว $syncScanned รูป" else "กำลังค้นหาสลิปย้อนหลัง 1 เดือน" }
                 androidx.work.WorkInfo.State.SUCCEEDED -> { syncing = false; pendingSlips = PendingSlipStore.load(context); val found = info.outputData.getInt("found", 0); syncStatusText = if (found > 0) "พบ $found รายการ รอตรวจ" else "ซิงค์แล้ว ไม่พบสลิปใหม่"; syncWorkId = null; break }
                 androidx.work.WorkInfo.State.FAILED, androidx.work.WorkInfo.State.CANCELLED -> { syncing = false; syncStatusText = "ซิงค์ไม่สำเร็จ แตะเพื่อสแกนใหม่"; syncWorkId = null; break }
                 else -> syncing = true
@@ -595,35 +595,57 @@ private fun MascotBadge(modifier: Modifier = Modifier) {
 @Composable
 private fun HomeSlipSyncBand(syncing: Boolean, scanned: Int, status: String, pending: Int, busy: Boolean, onScan: () -> Unit, onSync: () -> Unit, onReview: () -> Unit) {
     Surface(Modifier.fillMaxWidth(), color = RubEntryTab) {
-        Row(Modifier.fillMaxWidth().padding(start = 38.dp, end = 24.dp, top = 18.dp, bottom = 18.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.ReceiptLong, null, tint = RubBlue, modifier = Modifier.size(52.dp))
-            Spacer(Modifier.width(18.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    when {
-                        pending > 0 -> "มีสลิปรอตรวจ $pending รายการ"
-                        syncing -> "กำลังซิงค์สลิป"
-                        else -> "ซิงค์สลิปอัตโนมัติ"
-                    },
-                    color = RubEntryNavy,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Black,
-                )
-                Text(
-                    when {
-                        syncing && scanned > 0 -> "ตรวจแล้ว $scanned รูป"
-                        status.isNotBlank() -> status
-                        else -> "เปิดแอพแล้วตรวจรูปใหม่ให้แบบเงียบ ๆ"
-                    },
-                    color = RubBlue,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                )
-                if (syncing) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp), color = RubBlue, trackColor = RubBlue.copy(alpha = 0.16f))
+        Column(
+            Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 18.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Surface(Modifier.size(48.dp), color = RubBlue.copy(alpha = 0.16f), shape = RoundedCornerShape(16.dp)) {
+                    Icon(Icons.Default.ReceiptLong, null, tint = RubBlue, modifier = Modifier.padding(10.dp))
+                }
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        when {
+                            pending > 0 -> "สลิปรอตรวจ $pending รายการ"
+                            syncing -> "กำลังซิงค์สลิป"
+                            else -> "ซิงค์สลิปอัตโนมัติ"
+                        },
+                        color = RubEntryNavy,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Black,
+                        maxLines = 1,
+                    )
+                    Text(
+                        when {
+                            syncing && scanned > 0 -> "ตรวจแล้ว $scanned รูป"
+                            status.isNotBlank() -> status
+                        else -> "เปิดแอพแล้วตรวจย้อนหลัง 1 เดือน และเฝ้าดูรูปใหม่"
+                        },
+                        color = RubBlue,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 2,
+                    )
+                }
             }
-            Spacer(Modifier.width(8.dp))
-            TextButton(onClick = if (pending > 0) onReview else onSync, enabled = !busy) { Text(if (pending > 0) "ตรวจ" else "ซิงค์", color = RubBlue, fontWeight = FontWeight.Black) }
-            TextButton(onClick = onScan, enabled = !busy) { Text("เลือกสลิป", color = RubEntryNavy, fontWeight = FontWeight.Bold) }
+            if (syncing) LinearProgressIndicator(Modifier.fillMaxWidth(), color = RubBlue, trackColor = RubBlue.copy(alpha = 0.16f))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
+                OutlinedButton(
+                    onClick = onScan,
+                    enabled = !busy,
+                    shape = RoundedCornerShape(24.dp),
+                    border = BorderStroke(1.5.dp, RubEntryNavy.copy(alpha = 0.28f)),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                ) { Text("เลือกสลิป", color = RubEntryNavy, fontWeight = FontWeight.Bold, maxLines = 1) }
+                Button(
+                    onClick = if (pending > 0) onReview else onSync,
+                    enabled = !busy,
+                    shape = RoundedCornerShape(24.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = RubBlue, contentColor = Color.White),
+                    contentPadding = PaddingValues(horizontal = 18.dp, vertical = 8.dp),
+                ) { Text(if (pending > 0) "ตรวจ" else "ซิงค์", fontWeight = FontWeight.Black, maxLines = 1) }
+            }
         }
     }
 }

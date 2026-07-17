@@ -69,6 +69,7 @@ object SlipParser {
     private fun isRecipientCandidate(line: String): Boolean {
         val value = line.trim()
         return value.length in 3..100 &&
+            hasReadableNameSignal(value) &&
             value.count(Char::isDigit) < 5 &&
             !maskedAccountPattern.containsMatchIn(value) &&
             recipientStopWords.none { value.contains(it, true) } &&
@@ -79,6 +80,18 @@ object SlipParser {
             !value.equals("K PLUS", true) &&
             !value.contains("SCB EASY", true) &&
             !value.contains("Krungthai NEXT", true)
+    }
+
+    private fun hasReadableNameSignal(value: String): Boolean {
+        val hasThai = value.any { it in '\u0E00'..'\u0E7F' }
+        val hasAsciiLetter = value.any { it in 'A'..'Z' || it in 'a'..'z' }
+        val hasSuspiciousLatin = value.any { it in '\u00C0'..'\u024F' }
+        val startsWithNoise = value.firstOrNull()?.let { it.isDigit() || it in ".:;,_/\\|-" } == true
+        if (hasThai) return true
+        if (hasSuspiciousLatin || startsWithNoise) return false
+        if (!hasAsciiLetter) return false
+        val upper = value.uppercase(Locale.US)
+        return value.any(Char::isWhitespace) || listOf("CO", "LTD", "LIMITED", "COMPANY", "SHOP", "PAY", "MART", "MR", "DIY").any { upper.contains(it) }
     }
 
     private fun normalizeDate(raw: String, imageDate: Date?): String {

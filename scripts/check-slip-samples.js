@@ -1,72 +1,72 @@
 const samples = [
   {
-    name: "KPlus ShopeePay",
+    name: "KPlus Bill synthetic",
+    text: `จ่ายบิลสำเร็จ
+16 ก.ค. 69 19:01 น.
+นาย ตัวอย่าง ผู้โอน
+ธ.กสิกรไทย
+xxx-x-x1234-x
+↓
+คุณ ตัวอย่าง ผู้รับ
+200012400000001
+24122401
+เลขที่รายการ:
+099999999999DPM00001
+จำนวน:
+110.00 บาท`,
+    expected: { title: "คุณ ตัวอย่าง ผู้รับ", amount: "110.00", occurredAt: "16 ก.ค. 69 19:01" },
+  },
+  {
+    name: "KPlus Transfer synthetic",
+    text: `โอนเงินสำเร็จ
+16 ก.ค. 69 17:21 น.
+นาย ตัวอย่าง ผู้โอน
+ธ.กสิกรไทย
+xxx-x-x1234-x
+↓
+นางสาว ตัวอย่าง ปลายทาง
+ธ.เกียรตินาคินภัทร
+xxx-x-x5678-x
+เลขที่รายการ:
+099999999999DOR00002
+จำนวน:
+200.00 บาท`,
+    expected: { title: "นางสาว ตัวอย่าง ปลายทาง", amount: "200.00", occurredAt: "16 ก.ค. 69 17:21" },
+  },
+  {
+    name: "Merchant payment synthetic",
     text: `ชำระเงินสำเร็จ
 15 ก.ค. 69 22:51 น.
-นาย พีรพล ส
+นาย ตัวอย่าง ผู้โอน
 ธ.กสิกรไทย
-xxx-x-x7620-x
+xxx-x-x1234-x
 ↓
-ชำระสินค้าช้อปปี้
-บจก. ช้อปปี้เพย์ (ประเทศไทย)
+ชำระสินค้า
+บจก. ร้านตัวอย่าง เพย์ (ประเทศไทย)
 202607153711200
 เลขที่รายการ:
-016196225145CQR02202
+099999999999CQR00003
 จำนวน:
 1.00 บาท
 ค่าธรรมเนียม:
 0.00 บาท`,
-    expected: { title: "บจก. ช้อปปี้เพย์ (ประเทศไทย)", amount: "1.00", occurredAt: "15 ก.ค. 69 22:51" },
+    expected: { title: "บจก. ร้านตัวอย่าง เพย์ (ประเทศไทย)", amount: "1.00", occurredAt: "15 ก.ค. 69 22:51" },
   },
   {
-    name: "KPlus Bill",
-    text: `จ่ายบิลสำเร็จ
-16 ก.ค. 69 19:01 น.
-นาย พีรพล ส
-ธ.กสิกรไทย
-xxx-x-x7620-x
-↓
-อรรสา รอดแสวง
-200012412249267
-24122401
-เลขที่รายการ:
-016197190113DPM11831
-จำนวน:
-110.00 บาท`,
-    expected: { title: "อรรสา รอดแสวง", amount: "110.00", occurredAt: "16 ก.ค. 69 19:01" },
-  },
-  {
-    name: "KPlus Transfer",
-    text: `โอนเงินสำเร็จ
-16 ก.ค. 69 17:21 น.
-นาย พีรพล ส
-ธ.กสิกรไทย
-xxx-x-x7620-x
-↓
-นาย พีรพล สุขพลาย
-ธ.เกียรตินาคินภัทร
-xxx-x-x1028-x
-เลขที่รายการ:
-016197172106DOR09793
-จำนวน:
-200.00 บาท`,
-    expected: { title: "นาย พีรพล สุขพลาย", amount: "200.00", occurredAt: "16 ก.ค. 69 17:21" },
-  },
-  {
-    name: "Dime Transfer",
+    name: "Dime Transfer synthetic",
     text: `โอนเงิน
 500.00 บาท
 ค่าธรรมเนียม 0.00 บาท
 จาก
-นาย พีรพล สุขพลาย
+นาย ตัวอย่าง ผู้โอน
 x-0930
 ไปยัง
-นาย พีรพล สุขพลาย
+นาย ตัวอย่าง ผู้รับเงิน
 x-6203
 วันที่
 16 ก.ค. 2569 - 17:04 น.
 เลขที่สลิป 619717366106`,
-    expected: { title: "นาย พีรพล สุขพลาย", amount: "500.00", occurredAt: "16 ก.ค. 2569 17:04" },
+    expected: { title: "นาย ตัวอย่าง ผู้รับเงิน", amount: "500.00", occurredAt: "16 ก.ค. 2569 17:04" },
   },
 ];
 
@@ -79,17 +79,29 @@ const timePattern = /(?<![0-9])([01]?[0-9]|2[0-3]):[0-5][0-9](?![0-9])/;
 const datePattern = /(?<![0-9])([0-3]?[0-9][\/.-][01]?[0-9][\/.-](?:[0-9]{2}|[0-9]{4}))(?![0-9])/;
 const thaiSlipDatePattern = /(?<![0-9])([0-3]?[0-9]\s+[^0-9\n]{1,12}?\s+(?:[0-9]{2}|[0-9]{4}))(?=\s*(?:-|,)?\s*(?:[01]?[0-9]|2[0-3]):[0-5][0-9])/m;
 const recipientLabelPattern = /^(?:ผู้รับ|ชื่อผู้รับ|รับเงินโดย|ไปยัง|โอนไป|บัญชีปลายทาง|ชื่อบัญชี|merchant|merchant name|receiver|recipient|to)\s*[:：-]?\s*(.*)$/i;
-const maskedAccountPattern = /[x*]{1,}[^\\n]{0,20}[0-9]{3,4}[^\\n]{0,10}[x*]?/i;
+const maskedAccountPattern = /[x*]{1,}[^\n]{0,20}[0-9]{3,4}[^\n]{0,10}[x*]?/i;
 const recipientStopWords = [
   "สำเร็จ", "successful", "จาก", "จากบัญชี", "ผู้โอน", "ผู้ส่ง", "sender", "เลขที่รายการ",
   "reference", "ref", "รหัสอ้างอิง", "จำนวน", "ยอด", "amount", "total", "ค่าธรรมเนียม", "fee", "ธนาคาร", "bank",
   "ชำระเงิน", "ชำระสินค้า", "จ่ายบิล", "โอนเงิน", "สแกนตรวจสอบสลิป", "QR สลิป", "วันที่", "เลขที่สลิป",
 ];
 
+function hasReadableNameSignal(value) {
+  const hasThai = /[\u0E00-\u0E7F]/.test(value);
+  const hasAsciiLetter = /[A-Za-z]/.test(value);
+  const hasSuspiciousLatin = /[\u00C0-\u024F]/.test(value);
+  const startsWithNoise = /^[0-9.:;,_/\\|-]/.test(value);
+  if (hasThai) return true;
+  if (hasSuspiciousLatin || startsWithNoise) return false;
+  if (!hasAsciiLetter) return false;
+  return /\s/.test(value) || /(CO|LTD|LIMITED|COMPANY|SHOP|PAY|MART|MR|DIY)/i.test(value);
+}
+
 function isRecipientCandidate(line) {
   const value = line.trim();
   return value.length >= 3 &&
     value.length <= 100 &&
+    hasReadableNameSignal(value) &&
     (value.match(/\d/g) || []).length < 5 &&
     !maskedAccountPattern.test(value) &&
     !recipientStopWords.some((word) => value.toLowerCase().includes(word.toLowerCase())) &&
@@ -149,7 +161,7 @@ for (const sample of samples) {
 }
 
 const qrOnly = parse(`QR สลิป
-รหัสอ้างอิง 016197190113DPM11831`);
+รหัสอ้างอิง 099999999999DPM00001`);
 if (hasCompleteSlipBasics(qrOnly)) {
   failed = true;
   console.error("QR-only reference must not be treated as a complete auto-sync slip.");
@@ -157,14 +169,33 @@ if (hasCompleteSlipBasics(qrOnly)) {
 
 const qrPriority = parse(`QR สลิป
 จำนวน 110.00 บาท
-ชื่อผู้รับ อรรสา รอดแสวง
-รหัสอ้างอิง 016197190113DPM11831
+ชื่อผู้รับ คุณ ตัวอย่าง ผู้รับ
+รหัสอ้างอิง 099999999999DPM00001
 OCR สำรอง
 จำนวน 1.00 บาท
 ชื่อผู้รับ OCR ผิด
 16 ก.ค. 69 19:01 น.`);
-if (qrPriority.amount !== "110.00" || qrPriority.title !== "อรรสา รอดแสวง") {
+if (qrPriority.amount !== "110.00" || qrPriority.title !== "คุณ ตัวอย่าง ผู้รับ") {
   failed = true;
   console.error("QR priority failed:", qrPriority);
 }
+
+const noisyRecipient = parse(`โอนเงินสำเร็จ
+17 ก.ค. 69 12:40 น.
+นาย ตัวอย่าง ผู้โอน
+ธ.กสิกรไทย
+xxx-x-x1234-x
+↓
+6.L\u00f1usGnnu\u00e4ns
+ธ.เกียรตินาคินภัทร
+xxx-x-x5678-x
+เลขที่รายการ:
+099999999999DOR00004
+จำนวน:
+100.00 บาท`);
+if (noisyRecipient.title === "6.L\u00f1usGnnu\u00e4ns" || hasCompleteSlipBasics(noisyRecipient)) {
+  failed = true;
+  console.error("Noisy OCR recipient must not be accepted as a complete slip:", noisyRecipient);
+}
+
 process.exit(failed ? 1 : 0);

@@ -68,17 +68,22 @@ Slip parsing is QR-first:
 - auto-sync only queues a slip when amount, recipient/title, and date/time are complete
 - pending slips open the editor before saving
 - real-time sync watches MediaStore while the app is open after consent and permission
+- tests must use synthetic slip text or generated assets only; never commit real slip screenshots or local Downloads paths
 
 Auto-sync starts when opening the app if consent and image permission already exist. It also runs again when a new image is added while the app is open. Completion/failure copy stays inline through `syncStatusText`.
+
+The sync window must cover at most the latest 31 days. Real-time sync is still driven by MediaStore changes while the app is open, so new slip screenshots from the current day are picked up quickly without waiting for the next app start.
 
 ## Required Validation
 
 Run these after every UI or slip change:
 
 - `node scripts/check-text-integrity.js`
+- `node scripts/check-privacy.js`
 - `node scripts/check-slip-samples.js`
 - `node scripts/check-ui-flow.js`
 - APK build
+- no-admin desktop layout preview: `node scripts/check-ui-layout.js`
 - real device/emulator screenshot review when available
 
 ## GitHub Delivery Flow
