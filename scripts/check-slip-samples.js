@@ -125,6 +125,13 @@ function parse(text) {
   return { amount: labeledAmount || fallbackAmount || "", title: findRecipient(lines), occurredAt: [date, time].filter(Boolean).join(" ") };
 }
 
+function hasCompleteSlipBasics(parsed) {
+  return Number(parsed.amount) > 0 &&
+    parsed.title &&
+    parsed.title !== "ยังไม่จัดหมวด" &&
+    /[0-2]?[0-9]:[0-5][0-9]/.test(parsed.occurredAt);
+}
+
 let failed = false;
 for (const sample of samples) {
   const actual = parse(sample.text);
@@ -134,6 +141,30 @@ for (const sample of samples) {
       console.error(`${sample.name} ${key}: expected ${JSON.stringify(value)}, got ${JSON.stringify(actual[key])}`);
     }
   }
+  if (!hasCompleteSlipBasics(actual)) {
+    failed = true;
+    console.error(`${sample.name}: parsed result is not complete enough for auto-sync queue`);
+  }
   console.log(`${sample.name}:`, actual);
+}
+
+const qrOnly = parse(`QR สลิป
+รหัสอ้างอิง 016197190113DPM11831`);
+if (hasCompleteSlipBasics(qrOnly)) {
+  failed = true;
+  console.error("QR-only reference must not be treated as a complete auto-sync slip.");
+}
+
+const qrPriority = parse(`QR สลิป
+จำนวน 110.00 บาท
+ชื่อผู้รับ อรรสา รอดแสวง
+รหัสอ้างอิง 016197190113DPM11831
+OCR สำรอง
+จำนวน 1.00 บาท
+ชื่อผู้รับ OCR ผิด
+16 ก.ค. 69 19:01 น.`);
+if (qrPriority.amount !== "110.00" || qrPriority.title !== "อรรสา รอดแสวง") {
+  failed = true;
+  console.error("QR priority failed:", qrPriority);
 }
 process.exit(failed ? 1 : 0);

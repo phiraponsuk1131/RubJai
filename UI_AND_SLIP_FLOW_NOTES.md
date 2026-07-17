@@ -89,9 +89,11 @@ RubJai now uses a QR-first slip flow:
 
 - scan QR / mini-QR from the slip image first
 - use QR reference as the most stable slip fingerprint for duplicate protection
-- append QR amount, merchant, bank, and reference into the text stream when the QR payload exposes them
-- use OCR as fallback and as the source for visible fields that QR does not expose
+- prepend QR amount, merchant/recipient, bank, and reference into the parse text when the QR payload exposes them
+- use OCR only as fallback/additional context for fields that QR does not expose or for visible slip review details
 - keep every detected slip in the review editor before saving
+- auto-sync only places a slip in the pending queue when recipient/title, amount, and date/time are available
+- parser processed keys include a parser version, so improving slip parsing can rescan today's images instead of being blocked by old incomplete results
 
 OCR quality still depends on:
 

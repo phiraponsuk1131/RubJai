@@ -94,7 +94,8 @@ object SlipParser {
     private fun thaiImageDate(date: Date): String {
         val calendar = Calendar.getInstance().apply { time = date }
         val buddhistYear = (calendar.get(Calendar.YEAR) + 543) % 100
-        return "${calendar.get(Calendar.DAY_OF_MONTH)} ${thaiMonths[calendar.get(Calendar.MONTH)]} ${buddhistYear.toString().padStart(2, '0')}"
+        val time = "%02d:%02d".format(Locale.US, calendar.get(Calendar.HOUR_OF_DAY), calendar.get(Calendar.MINUTE))
+        return "${calendar.get(Calendar.DAY_OF_MONTH)} ${thaiMonths[calendar.get(Calendar.MONTH)]} ${buddhistYear.toString().padStart(2, '0')} $time"
     }
 
 }

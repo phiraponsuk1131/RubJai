@@ -118,6 +118,7 @@ object KPlusSyncManager {
 }
 
 class KPlusScanWorker(context: Context, params: WorkerParameters) : Worker(context, params) {
+    private val parserVersion = "slip-v3.0.0-qr-complete-1"
     private val kPlusReference = Regex("[0-9]{10,}(?:CPM|DQR|DTF)[0-9]+", RegexOption.IGNORE_CASE)
     private val genericReference = Regex("(?i)(?:เลขที่รายการ|reference|transaction id|รหัสอ้างอิง)[^\\n]{0,50}[A-Z0-9-]{6,}")
     private val supportedApps = listOf(
@@ -146,7 +147,7 @@ class KPlusScanWorker(context: Context, params: WorkerParameters) : Worker(conte
                 var scanned = 0
                 while (it.moveToNext() && scanned < 200) {
                     val id = it.getLong(idColumn)
-                    val mediaKey = id.toString()
+                    val mediaKey = "$parserVersion:$id"
                     if (PendingSlipStore.isProcessed(applicationContext, mediaKey)) continue
                     scanned++
                     setProgressAsync(workDataOf("scanned" to scanned))
@@ -170,7 +171,7 @@ class KPlusScanWorker(context: Context, params: WorkerParameters) : Worker(conte
                             SlipParser.parse(text, if (qr.rawValues.isNotEmpty()) "auto_bank_slip_qr_ocr" else "auto_bank_slip", imageDate)
                                 .copy(slipUri = uri.toString(), slipFingerprint = fingerprint)
                         } else null
-                        if (draft != null && (draft.amount.toDoubleOrNull()?.let { value -> value > 0 } == true || fingerprint.isNotBlank())) {
+                        if (draft != null && draft.hasCompleteSlipBasics()) {
                             PendingSlipStore.add(applicationContext, mediaKey, draft)
                             found++
                         } else {
@@ -183,5 +184,12 @@ class KPlusScanWorker(context: Context, params: WorkerParameters) : Worker(conte
             recognizer.close()
         }
         return Result.success(workDataOf("found" to found))
+    }
+
+    private fun DraftTransaction.hasCompleteSlipBasics(): Boolean {
+        val hasAmount = amount.toDoubleOrNull()?.let { it > 0 } == true
+        val hasTitle = title.isNotBlank() && title != category && title != "ยังไม่จัดหมวด"
+        val hasDateTime = occurredAt.isNotBlank() && Regex("[0-2]?[0-9]:[0-5][0-9]").containsMatchIn(occurredAt)
+        return hasAmount && hasTitle && hasDateTime
     }
 }

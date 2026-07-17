@@ -52,13 +52,15 @@ object SlipQrReader {
     fun appendToOcrText(text: String, qr: SlipQrResult): String {
         if (qr.rawValues.isEmpty()) return text
         return buildString {
-            append(text)
-            appendLine()
             appendLine("QR สลิป")
-            qr.transactionReference.takeIf(String::isNotBlank)?.let { appendLine("รหัสอ้างอิง $it") }
-            qr.sendingBank.takeIf(String::isNotBlank)?.let { appendLine("ธนาคาร $it") }
             qr.amount.takeIf(String::isNotBlank)?.let { appendLine("จำนวน $it บาท") }
             qr.merchantName.takeIf(String::isNotBlank)?.let { appendLine("ชื่อผู้รับ $it") }
+            qr.transactionReference.takeIf(String::isNotBlank)?.let { appendLine("รหัสอ้างอิง $it") }
+            qr.sendingBank.takeIf(String::isNotBlank)?.let { appendLine("ธนาคาร $it") }
+            appendLine("OCR สำรอง")
+            append(text)
+            appendLine()
+            appendLine("QR ดิบ")
             qr.rawValues.forEach { appendLine(it) }
         }
     }

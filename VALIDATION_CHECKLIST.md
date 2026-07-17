@@ -22,6 +22,7 @@ Do not start a UI/slip/release edit without checking these notes first. This pre
 2. Slip sample parsing
    - Run `node scripts/check-slip-samples.js`
    - Must extract recipient/name, amount, date, and time from the sample K PLUS / Dime slip cases.
+   - Auto-sync must not queue QR-only incomplete slips that do not have amount, recipient/name, and date/time.
 
 3. Redesigned UI flow guard
    - Run `node scripts/check-ui-flow.js`
