@@ -35,7 +35,7 @@ These checks must be run before every push to GitHub. Do not push first and rely
 4. Redesigned UI flow guard
    - Run `node scripts/check-ui-flow.js`
    - Must confirm:
-     - app version is `3.0.2`
+     - app version is `3.0.3`
      - home renders `HomeReferenceScreen`
      - the home rail is responsive, not fixed at the broken wide value
      - the new RubJai mark is used instead of the old square mascot

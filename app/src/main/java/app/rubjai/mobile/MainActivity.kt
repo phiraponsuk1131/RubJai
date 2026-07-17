@@ -121,20 +121,20 @@ enum class TransactionType { INCOME, EXPENSE }
 private enum class EntryPeriod(val label: String) { TODAY("วันนี้"), WEEK("สัปดาห์นี้"), MONTH("เดือนนี้"), ALL("ทั้งหมด") }
 private enum class EntryKind(val label: String) { ALL("ทั้งหมด"), INCOME("รายรับ"), EXPENSE("รายจ่าย") }
 
-private val RubInk = Color(0xFF082F36)
-private val RubPanel = Color(0xFF124A50)
-private val RubCream = Color(0xFFFFF7E8)
-private val RubCoral = Color(0xFFFF8A72)
-private val RubMint = Color(0xFF72DCC0)
-private val RubPlum = Color(0xFF765C80)
-private val RubMuted = Color(0xFFBBD5D1)
-private val RubEntryYellow = Color(0xFFFFDA4D)
-private val RubEntryNavy = Color(0xFF00243D)
-private val RubEntryCard = Color(0xFF001C31)
-private val RubEntryTab = Color(0xFFFFF0A7)
-private val RubBlue = Color(0xFF1E95FF)
-private val RubRed = Color(0xFFFF4B5C)
-private val RubEntryMuted = Color(0xFF8FA9BF)
+private val RubInk = Color(0xFF062B2F)
+private val RubPanel = Color(0xFF0F4A48)
+private val RubCream = Color(0xFFF7F3E8)
+private val RubCoral = Color(0xFF63D9B7)
+private val RubMint = Color(0xFF63D9B7)
+private val RubPlum = Color(0xFF062B2F)
+private val RubMuted = Color(0xFFA8C8C2)
+private val RubEntryYellow = Color(0xFF63D9B7)
+private val RubEntryNavy = Color(0xFF062B2F)
+private val RubEntryCard = Color(0xFF041D22)
+private val RubEntryTab = Color(0xFFDDF8EF)
+private val RubBlue = Color(0xFF63D9B7)
+private val RubRed = Color(0xFF63D9B7)
+private val RubEntryMuted = Color(0xFFA8C8C2)
 
 @Composable
 fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
@@ -191,7 +191,7 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
         MaterialTheme(colorScheme = colors) {
             Box(Modifier.fillMaxSize().background(RubInk), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    androidx.compose.foundation.Image(painterResource(R.drawable.rubjai_mark), null, Modifier.size(132.dp))
+                    androidx.compose.foundation.Image(painterResource(R.drawable.rubjai_logo), null, Modifier.size(132.dp))
                     if (migrationError == null) { CircularProgressIndicator(color = RubMint); Text("กำลังเตรียม RubJai 3", color = RubCream) }
                     else { Text(migrationError.orEmpty(), color = RubCoral); Button(onClick = { migrationError = null; authRepository.ensureCleanStartV2 { error -> migrationError = error; migrationReady = error == null } }) { Text("ลองอีกครั้ง") } }
                 }
@@ -219,6 +219,7 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
     var syncStatusText by remember { mutableStateOf("") }
     var pendingSlips by remember { mutableStateOf(PendingSlipStore.load(context)) }
     var showPending by remember { mutableStateOf(false) }
+    val autoSavingPendingIds = remember { mutableStateListOf<String>() }
     var pendingToReview by remember { mutableStateOf<PendingSlip?>(null) }
     var selectedEntry by remember { mutableStateOf<MoneyTransaction?>(null) }
     var mainTab by remember { mutableIntStateOf(0) }
@@ -234,11 +235,37 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
             val info = withContext(Dispatchers.IO) { runCatching { KPlusSyncManager.workInfo(context, workId) }.getOrNull() }
             when (info?.state) {
                 androidx.work.WorkInfo.State.RUNNING -> { syncing = true; syncScanned = info.progress.getInt("scanned", 0); syncStatusText = if (syncScanned > 0) "ตรวจแล้ว $syncScanned รูป" else "กำลังค้นหาสลิปย้อนหลัง 1 เดือน" }
-                androidx.work.WorkInfo.State.SUCCEEDED -> { syncing = false; pendingSlips = PendingSlipStore.load(context); val found = info.outputData.getInt("found", 0); syncStatusText = if (found > 0) "พบ $found รายการ รอตรวจ" else "ซิงค์แล้ว ไม่พบสลิปใหม่"; syncWorkId = null; break }
+                androidx.work.WorkInfo.State.SUCCEEDED -> { syncing = false; pendingSlips = PendingSlipStore.load(context); val found = info.outputData.getInt("found", 0); syncStatusText = if (found > 0) "พบ $found รายการ กำลังบันทึกอัตโนมัติ" else "ซิงค์แล้ว ไม่พบสลิปใหม่"; syncWorkId = null; break }
                 androidx.work.WorkInfo.State.FAILED, androidx.work.WorkInfo.State.CANCELLED -> { syncing = false; syncStatusText = "ซิงค์ไม่สำเร็จ แตะเพื่อสแกนใหม่"; syncWorkId = null; break }
                 else -> syncing = true
             }
             delay(500)
+        }
+    }
+    LaunchedEffect(pendingSlips) {
+        pendingSlips.forEach { pending ->
+            val cleanTitle = cleanSlipTitle(pending.draft.title)
+            val ready = cleanTitle.isNotBlank() && pending.draft.amount.toDoubleOrNull()?.let { it > 0.0 } == true && pending.draft.occurredAt.isNotBlank()
+            if (!ready) {
+                PendingSlipStore.remove(context, pending.id)
+                pendingSlips = PendingSlipStore.load(context)
+                return@forEach
+            }
+            if (pending.id !in autoSavingPendingIds) {
+                autoSavingPendingIds.add(pending.id)
+                val savedDraft = pending.draft.copy(title = cleanTitle)
+                repository.add(savedDraft) { error ->
+                    autoSavingPendingIds.remove(pending.id)
+                    if (error == null || error.contains("DUPLICATE_SLIP", true) || error.contains("บันทึกแล้ว", true)) {
+                        if (savedDraft.slipUri.isNotBlank()) LocalSlipLinkStore.put(context, TransactionRepository.documentIdFor(savedDraft), savedDraft.slipUri)
+                        PendingSlipStore.remove(context, pending.id)
+                        pendingSlips = PendingSlipStore.load(context)
+                        syncStatusText = "บันทึกสลิปอัตโนมัติแล้ว"
+                    } else {
+                        syncStatusText = "บันทึกสลิปอัตโนมัติไม่สำเร็จ จะลองซิงค์อีกครั้งเมื่อเปิดแอพ"
+                    }
+                }
+            }
         }
     }
 
@@ -287,9 +314,16 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
             containerColor = RubInk,
             topBar = {},
             bottomBar = {
-                NavigationBar(containerColor = RubCream) {
-                    NavigationBarItem(mainTab == 0, { mainTab = 0 }, { Icon(Icons.Default.Home, null) }, label = { Text("หน้าหลัก") })
-                    NavigationBarItem(mainTab == 1, { mainTab = 1 }, { Icon(Icons.Default.AccountCircle, null) }, label = { Text("บัญชีของฉัน") })
+                NavigationBar(containerColor = RubCream, tonalElevation = 0.dp) {
+                    val navColors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = Color.White,
+                        selectedTextColor = RubBlue,
+                        indicatorColor = RubPlum,
+                        unselectedIconColor = RubEntryNavy,
+                        unselectedTextColor = RubEntryNavy,
+                    )
+                    NavigationBarItem(mainTab == 0, { mainTab = 0 }, { Icon(Icons.Default.Home, null) }, label = { Text("หน้าหลัก", fontWeight = FontWeight.Black) }, colors = navColors)
+                    NavigationBarItem(mainTab == 1, { mainTab = 1 }, { Icon(Icons.Default.AccountCircle, null) }, label = { Text("บัญชีของฉัน", fontWeight = FontWeight.Bold) }, colors = navColors)
                 }
             },
             floatingActionButton = {
@@ -448,11 +482,11 @@ private fun OnboardingVisual(page: Int) {
                     1, 5 -> Icon(Icons.Default.ReceiptLong, null, Modifier.size(112.dp), tint = RubMint)
                     2 -> Icon(Icons.Default.PieChart, null, Modifier.size(112.dp), tint = RubCoral)
                     3, 4 -> Icon(Icons.Default.CreditCard, null, Modifier.size(112.dp), tint = RubCream)
-                    else -> androidx.compose.foundation.Image(painterResource(R.drawable.rubjai_mark), "น้องรับจ่าย", Modifier.size(160.dp), contentScale = ContentScale.Fit)
+                    else -> androidx.compose.foundation.Image(painterResource(R.drawable.rubjai_logo), "น้องรับจ่าย", Modifier.size(160.dp), contentScale = ContentScale.Fit)
                 }
             }
         }
-        if (page != 0) androidx.compose.foundation.Image(painterResource(R.drawable.rubjai_mark), null, Modifier.align(Alignment.BottomEnd).size(108.dp), contentScale = ContentScale.Fit)
+        if (page != 0) androidx.compose.foundation.Image(painterResource(R.drawable.rubjai_logo), null, Modifier.align(Alignment.BottomEnd).size(108.dp), contentScale = ContentScale.Fit)
     }
 }
 
@@ -466,7 +500,7 @@ private fun UserHub(name: String, entryCount: Int, editProfile: () -> Unit, debt
                     Text("สวัสดี ${name.ifBlank { "คุณ" }}", color = RubEntryNavy.copy(alpha = .82f), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     Text("$entryCount รายการที่บันทึกไว้", color = RubBlue, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black)
                 }
-                androidx.compose.foundation.Image(painterResource(R.drawable.rubjai_mark), null, Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = 8.dp).size(138.dp))
+                androidx.compose.foundation.Image(painterResource(R.drawable.rubjai_logo), null, Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = 8.dp).size(138.dp))
             }
         }
         UserHubRow(Icons.Default.AccountCircle, "ข้อมูลส่วนตัวและบัญชี", editProfile)
@@ -563,18 +597,7 @@ private fun HomeReferenceScreen(
                 groups.forEach { (day, dayEntries) -> HomeDaySection(day, dayEntries, railWidth, onOpen) }
             }
 
-            Spacer(Modifier.height(14.dp))
-            Button(
-                onClick = onAdd,
-                colors = ButtonDefaults.buttonColors(containerColor = RubBlue, contentColor = Color.White),
-                shape = RoundedCornerShape(28.dp),
-                modifier = Modifier.align(Alignment.End).padding(end = sidePadding, bottom = 24.dp).height(58.dp),
-                contentPadding = PaddingValues(horizontal = 20.dp),
-            ) {
-                Icon(Icons.Default.Edit, null, modifier = Modifier.size(26.dp))
-                Spacer(Modifier.width(10.dp))
-                Text("จดเพิ่ม", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, maxLines = 1)
-            }
+            Spacer(Modifier.height(90.dp))
         }
     }
 }
@@ -584,7 +607,7 @@ private fun MascotBadge(modifier: Modifier = Modifier) {
     Surface(modifier, color = RubEntryNavy, shape = CircleShape, shadowElevation = 6.dp) {
         Box(Modifier.fillMaxSize().padding(4.dp), contentAlignment = Alignment.Center) {
             androidx.compose.foundation.Image(
-                painterResource(R.drawable.rubjai_mark),
+                painterResource(R.drawable.rubjai_logo),
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize().clip(CircleShape),
                 contentScale = ContentScale.Crop,
@@ -607,7 +630,7 @@ private fun HomeSlipSyncBand(syncing: Boolean, scanned: Int, status: String, pen
                 Column(Modifier.weight(1f)) {
                     Text(
                         when {
-                            pending > 0 -> "สลิปรอตรวจ $pending รายการ"
+                            pending > 0 -> "สลิปกำลังบันทึก $pending รายการ"
                             syncing -> "กำลังซิงค์สลิป"
                             else -> "ซิงค์สลิปอัตโนมัติ"
                         },
@@ -639,12 +662,12 @@ private fun HomeSlipSyncBand(syncing: Boolean, scanned: Int, status: String, pen
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
                 ) { Text("เลือกสลิป", color = RubEntryNavy, fontWeight = FontWeight.Bold, maxLines = 1) }
                 Button(
-                    onClick = if (pending > 0) onReview else onSync,
+                    onClick = onSync,
                     enabled = !busy,
                     shape = RoundedCornerShape(24.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = RubBlue, contentColor = Color.White),
                     contentPadding = PaddingValues(horizontal = 18.dp, vertical = 8.dp),
-                ) { Text(if (pending > 0) "ตรวจ" else "ซิงค์", fontWeight = FontWeight.Black, maxLines = 1) }
+                ) { Text("ซิงค์", fontWeight = FontWeight.Black, maxLines = 1) }
             }
         }
     }
@@ -942,10 +965,11 @@ private fun CategoryManagerDialog(close: () -> Unit) {
     AlertDialog(onDismissRequest = onClose, title = { Text("สลิปรอตรวจ") }, text = {
         if (items.isEmpty()) Text("ไม่มีรายการรอตรวจ") else LazyColumn(Modifier.fillMaxWidth().heightIn(max = 460.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             items(items, key = { it.id }) { pending ->
+                val cleanTitle = cleanSlipTitle(pending.draft.title)
                 Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFF4F7FA)), modifier = Modifier.fillMaxWidth().clickable { onReview(pending) }) {
                     Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        if (pending.draft.slipUri.isNotBlank()) SlipSourceCard(pending.draft.slipUri, pending.draft.title, pending.draft.occurredAt) { onReview(pending) }
-                        Text(pending.draft.title.ifBlank { "ไม่พบชื่อร้าน/ผู้รับ" }, fontWeight = FontWeight.Bold)
+                        if (pending.draft.slipUri.isNotBlank()) SlipSourceCard(pending.draft.slipUri, cleanTitle, pending.draft.occurredAt) { onReview(pending) }
+                        Text(cleanTitle.ifBlank { "ต้องตรวจชื่อผู้รับ" }, fontWeight = FontWeight.Bold, color = if (cleanTitle.isBlank()) RubRed else Color.Unspecified)
                         Text("${pending.draft.amount} บาท", color = RubBlue, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                         Text(listOf(pending.draft.occurredAt, pending.draft.category).filter(String::isNotBlank).joinToString(" • "), style = MaterialTheme.typography.bodySmall)
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
@@ -976,7 +1000,7 @@ private fun TransactionDialog(initial: DraftTransaction, onDismiss: () -> Unit, 
     val isIncomeStart = initial.type == TransactionType.INCOME || initial.source == "manual_income"
     var mode by remember(initial) { mutableStateOf(if (isIncomeStart) TransactionType.INCOME else TransactionType.EXPENSE) }
     var amount by remember(initial) { mutableStateOf(initial.amount) }
-    var title by remember(initial) { mutableStateOf(initial.title) }
+    var title by remember(initial) { mutableStateOf(cleanSlipTitle(initial.title)) }
     var category by remember(initial) { mutableStateOf(initial.category.ifBlank { if (isIncomeStart) "รายรับ" else "ยังไม่จัดหมวด" }) }
     var remark by remember(initial) { mutableStateOf(initial.remark) }
     var showCategories by remember { mutableStateOf(false) }
@@ -1251,3 +1275,8 @@ private fun moneyPlain(value: Double) = NumberFormat.getNumberInstance(Locale("t
     minimumFractionDigits = if (value % 1.0 == 0.0) 0 else 2
     maximumFractionDigits = 2
 }.format(value)
+
+private fun cleanSlipTitle(title: String): String {
+    val trimmed = title.trim()
+    return if (trimmed.startsWith("โอนไปบัญชีลงท้าย")) "" else trimmed
+}

@@ -7,6 +7,8 @@ const riskyExtensions = new Set([".jpg", ".jpeg", ".png", ".webp", ".heic", ".pd
 const allowedBinaryAssets = new Set([
   path.normalize("app/src/main/res/drawable-nodpi/rubjai_mascot.png"),
   path.normalize("app/src/main/res/drawable-nodpi/rubjai_icon.png"),
+  path.normalize("app/src/main/res/drawable-nodpi/rubjai_mark.png"),
+  path.normalize("app/src/main/res/drawable-nodpi/rubjai_logo.png"),
 ]);
 const forbiddenTextPatterns = [
   /C:[\\/]+Users[\\/]+[^"'\s]+[\\/]+Downloads/i,

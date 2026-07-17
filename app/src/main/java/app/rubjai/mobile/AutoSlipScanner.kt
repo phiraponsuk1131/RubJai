@@ -119,7 +119,7 @@ object KPlusSyncManager {
 }
 
 class KPlusScanWorker(context: Context, params: WorkerParameters) : Worker(context, params) {
-    private val parserVersion = "slip-v3.0.2-month-readable-name-1"
+    private val parserVersion = "slip-v3.0.3-no-account-ending-title-1"
     private val kPlusReference = Regex("[0-9]{10,}(?:CPM|DQR|DTF)[0-9]+", RegexOption.IGNORE_CASE)
     private val genericReference = Regex("(?i)(?:เลขที่รายการ|reference|transaction id|รหัสอ้างอิง)[^\\n]{0,50}[A-Z0-9-]{6,}")
     private val supportedApps = listOf(

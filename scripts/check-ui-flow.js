@@ -9,17 +9,17 @@ function fail(message) {
   process.exitCode = 1;
 }
 
-if (!build.includes('versionName = "3.0.2"')) fail("Expected app versionName 3.0.2 for the slip/UI hotfix release.");
-if (!build.includes("versionCode = 21")) fail("Expected app versionCode 21 for v3.0.2.");
+if (!build.includes('versionName = "3.0.3"')) fail("Expected app versionName 3.0.3 for the slip/UI hotfix release.");
+if (!build.includes("versionCode = 22")) fail("Expected app versionCode 22 for v3.0.3.");
 if (!main.includes("HomeReferenceScreen(")) fail("Home screen must render HomeReferenceScreen.");
 if (!main.includes("HomeSlipSyncBand(")) fail("Slip sync must be displayed inline on the home timeline.");
 if (!main.includes("HomeTimelineRow(")) fail("Home timeline rows with category icons are required.");
 if (!main.includes("ExtendedFloatingActionButton(") || !main.includes('Text("จดเพิ่ม"')) fail("Home add action must use the blue extended จดเพิ่ม button.");
 if (!main.includes("SlipSourceCard(initial.slipUri")) fail("Transaction editor must show the source slip card when a slip image is available.");
 if (!main.includes("FullScreenSlipDialog(initial.slipUri")) fail("Transaction editor must allow opening the source slip full screen.");
-if (!main.includes("R.drawable.rubjai_mark")) fail("The redesigned app must use the new RubJai mark.");
+if (!main.includes("R.drawable.rubjai_logo")) fail("The redesigned app must use the new RubJai mark.");
 if (main.includes("R.drawable.rubjai_mascot")) fail("Old square mascot must not be used in active app UI.");
-if (!launcherForeground.includes("@drawable/rubjai_mark")) fail("Launcher foreground must use the new RubJai mark.");
+if (!launcherForeground.includes("@drawable/rubjai_logo")) fail("Launcher foreground must use the new RubJai mark.");
 
 if (main.includes("padding(start = 138.dp)") || main.includes("Modifier.width(138.dp)")) {
   fail("Home rail must be responsive; fixed 138.dp rail caused narrow vertical text.");

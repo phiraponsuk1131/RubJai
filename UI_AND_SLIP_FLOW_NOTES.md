@@ -65,12 +65,14 @@ Slip parsing is QR-first:
 - use QR reference/raw payload for duplicate protection
 - prepend QR fields into parse text when available
 - use OCR only as fallback/additional context
-- auto-sync only queues a slip when amount, recipient/title, and date/time are complete
-- pending slips open the editor before saving
+- auto-sync only saves a slip when amount, recipient/title, and date/time are complete
+- incomplete or noisy OCR-only slip names must not be auto-saved as fake recipients
 - real-time sync watches MediaStore while the app is open after consent and permission
 - tests must use synthetic slip text or generated assets only; never commit real slip screenshots or local Downloads paths
 
 Auto-sync starts when opening the app if consent and image permission already exist. It also runs again when a new image is added while the app is open. Completion/failure copy stays inline through `syncStatusText`.
+
+When auto-sync finds complete slips, the app saves them automatically into the transaction date from the slip. Slip sync must not show a completion popup; status stays inline on the home timeline.
 
 The sync window must cover at most the latest 31 days. Real-time sync is still driven by MediaStore changes while the app is open, so new slip screenshots from the current day are picked up quickly without waiting for the next app start.
 

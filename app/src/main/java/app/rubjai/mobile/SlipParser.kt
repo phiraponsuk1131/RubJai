@@ -62,8 +62,7 @@ object SlipParser {
             isRecipientCandidate(line)
         }
         if (!candidate.isNullOrBlank()) return candidate
-        val ending = Regex("[0-9]{3,4}").find(lines[recipientAccountIndex])?.value
-        return ending?.let { "โอนไปบัญชีลงท้าย $it" }
+        return null
     }
 
     private fun isRecipientCandidate(line: String): Boolean {

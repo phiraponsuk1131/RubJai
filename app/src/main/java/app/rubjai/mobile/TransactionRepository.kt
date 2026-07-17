@@ -5,7 +5,9 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.ServerTimestamp
 import java.security.MessageDigest
+import java.util.Calendar
 import java.util.Date
+import java.util.Locale
 import java.util.UUID
 
 data class MoneyTransaction(
@@ -56,7 +58,7 @@ class TransactionRepository {
                 remark = draft.remark.trim().take(500),
                 occurredAt = draft.occurredAt.trim().take(50),
                 slipFingerprint = if (slipBased) fingerprint else "",
-                createdAt = Date(),
+                createdAt = createdAtFor(draft),
                 updatedAt = Date(),
             )
             if (!slipBased) {
@@ -108,6 +110,33 @@ class TransactionRepository {
                 .ifBlank { "${draft.amount}|${draft.occurredAt}|${draft.category}" }
             return MessageDigest.getInstance("SHA-256").digest(canonical.toByteArray())
                 .joinToString("") { "%02x".format(it) }.take(32)
+        }
+
+        private fun createdAtFor(draft: DraftTransaction): Date {
+            val text = draft.occurredAt.trim()
+            val time = Regex("([01]?[0-9]|2[0-3]):([0-5][0-9])").find(text)
+            val day = Regex("(?<![0-9])([0-3]?[0-9])").find(text)?.groupValues?.getOrNull(1)?.toIntOrNull()
+            val month = thaiMonthIndex(text)
+            val yearText = Regex("(?:[0-9]{2}|[0-9]{4})(?=\\s*(?:-|,)?\\s*(?:[01]?[0-9]|2[0-3]):)").find(text)?.value
+                ?: Regex("(?:[0-9]{2}|[0-9]{4})$").find(text)?.value
+            if (day == null || month == null || yearText == null) return Date()
+            val buddhistYear = yearText.toInt().let { if (it < 100) 2500 + it else it }
+            return Calendar.getInstance().apply {
+                set(Calendar.YEAR, buddhistYear - 543)
+                set(Calendar.MONTH, month)
+                set(Calendar.DAY_OF_MONTH, day)
+                set(Calendar.HOUR_OF_DAY, time?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 0)
+                set(Calendar.MINUTE, time?.groupValues?.getOrNull(2)?.toIntOrNull() ?: 0)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }.time
+        }
+
+        private fun thaiMonthIndex(value: String): Int? {
+            val normalized = value.lowercase(Locale("th", "TH"))
+            return listOf("ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค.")
+                .indexOfFirst { normalized.contains(it) }
+                .takeIf { it >= 0 }
         }
     }
 }

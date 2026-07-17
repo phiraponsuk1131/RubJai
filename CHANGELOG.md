@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.0.3
+
+- Stopped using account-ending fallback text as a slip recipient name.
+- Saves complete synced slips automatically into the slip's own date without a sync-complete popup.
+- Removed the duplicate home add button, improved bottom navigation contrast, and replaced the RubJai mark with the selected white-background check logo.
+
 ## 3.0.2
 
 - Fixed the Thai in-app update notes so the update popup uses readable Thai text.
