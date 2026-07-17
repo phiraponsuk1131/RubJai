@@ -1,182 +1,95 @@
 # UI and Slip Flow Notes
 
-## Goal
+## Current Direction
 
-Version 3.0.0 moves the main home, transaction entry, category picker, and slip-sync surface closer to the provided reference video/screenshot:
+RubJai 3.x is a full app redesign. The old cream/card home screen is no longer the target. The active direction is a RubJai-owned dark navy/yellow timeline inspired by the provided reference videos and screenshots, without copying them exactly.
 
-- dark navy home timeline
+Key visual requirements:
+
+- dark navy app background
 - yellow monthly summary card
-- left day rail
-- blue extended "จดเพิ่ม" action
-- yellow top command area
-- dark navy transaction canvas
-- expense / income / transfer-style tabs
-- large amount card
-- blue outlined category selector
-- bottom category sheet with a white background and icon grid
-
-The implementation keeps RubJai's own data model and does not copy another app exactly.
+- narrow responsive left day rail
+- blue `จดเพิ่ม` action
+- inline slip sync band
+- daily transaction groups
+- category-icon transaction rows
+- white bottom category sheet with circular colored icons
+- dark full-screen add/edit transaction flow
+- new RubJai wallet mark instead of the old square mascot
 
 ## Home Timeline Flow
 
-1. The active home screen uses `HomeReferenceScreen`.
-2. The old active home widgets are no longer called from the main tab:
+1. The active home screen must use `HomeReferenceScreen`.
+2. The old active widgets must not return:
    - `SummaryCard`
    - `HomeActions`
    - `KPlusSyncStatus`
    - `SpendingOverview`
    - `EntryRow`
-3. The top of the home screen shows the latest save time and a yellow month summary card.
-4. Slip sync is shown as an inline band below the month card.
-5. Transactions are grouped by day with a left rail, daily summary block, and category-icon rows.
-6. The primary add action is the blue extended `จดเพิ่ม` button.
-7. Tapping a transaction opens the same dark full-screen editor used for new entries, not the old cream detail screen.
+3. The month summary card must stay wide enough on phone screens. Do not bring back a fixed `138.dp` rail.
+4. Thai text and amount labels must render horizontally.
+5. The mascot/logo on the home card must be cropped as a badge, not shown as a large square image.
+6. Slip sync must show status inline on the home timeline. Do not show a completion popup for slip sync.
 
 ## Transaction Entry Flow
 
-1. User opens a scanned slip or creates a transaction.
-2. RubJai opens a full-screen editor instead of the old alert dialog.
-3. User can edit:
+1. Manual entry, scanned slip review, pending slip review, and editing a saved transaction all use the same full-screen dark editor.
+2. The editor must show:
+   - date/time
    - amount
-   - merchant / recipient / title
-   - category
+   - title / recipient
+   - category selector
    - note
-4. Tapping the category row opens a bottom sheet similar to the reference image.
-5. Selecting a category closes the sheet and returns to the editor.
-6. Saving writes the confirmed transaction.
+   - source slip card when `slipUri` exists
+3. Tapping the source slip card opens the original slip image full screen.
+4. Saved transaction details must reopen the original source slip from the device through `LocalSlipLinkStore`.
+5. Firestore must not store the slip image or local image URI.
 
 ## Category Sheet
 
-The category picker is built in Compose with:
+The category picker is a white bottom sheet with:
 
-- white bottom sheet
 - grey header
 - close button
 - add-tag button placeholder
 - four-column category grid
 - circular icon buttons
+- centered labels
 - selected category border
-
-Category icons are inferred from category text, so custom categories still display a fallback grid icon.
 
 ## Slip Sync Flow
 
-Manual slip selection still parses a selected image with ML Kit OCR.
-
-The home screen now includes an inline slip-sync band that shows:
-
-- current sync state
-- pending slip count
-- manual slip picker
-- retry/resync action
-- review action when pending slips exist
-
-Auto slip sync now starts when entering the app if:
-
-- the user previously gave scan consent
-- the app already has image-read permission
-- no sync is currently running
-
-Pending slips no longer save immediately from the pending list. They now open the same full-screen editor first, so the user can confirm or fix name, amount, category, and note before saving.
-
-Slip sync completion must not display a popup. Completion/failure copy stays inline in the home timeline through `syncStatusText`.
-
-Real-time sync now registers a MediaStore observer while the app is open. When a new image is added and the user has already granted consent and image permission, RubJai triggers a throttled sync instead of waiting for the next app start.
-
-## OCR Limits
-
-RubJai now uses a QR-first slip flow:
+Slip parsing is QR-first:
 
 - scan QR / mini-QR from the slip image first
-- use QR reference as the most stable slip fingerprint for duplicate protection
-- prepend QR amount, merchant/recipient, bank, and reference into the parse text when the QR payload exposes them
-- use OCR only as fallback/additional context for fields that QR does not expose or for visible slip review details
-- keep every detected slip in the review editor before saving
-- auto-sync only places a slip in the pending queue when recipient/title, amount, and date/time are available
-- parser processed keys include a parser version, so improving slip parsing can rescan today's images instead of being blocked by old incomplete results
+- use QR reference/raw payload for duplicate protection
+- prepend QR fields into parse text when available
+- use OCR only as fallback/additional context
+- auto-sync only queues a slip when amount, recipient/title, and date/time are complete
+- pending slips open the editor before saving
+- real-time sync watches MediaStore while the app is open after consent and permission
 
-OCR quality still depends on:
+Auto-sync starts when opening the app if consent and image permission already exist. It also runs again when a new image is added while the app is open. Completion/failure copy stays inline through `syncStatusText`.
 
-- slip image clarity
-- bank/wallet layout
-- language model recognition
-- whether the amount and recipient appear as readable text
+## Required Validation
 
-The app should always let users correct OCR output before saving because 100% OCR accuracy cannot be guaranteed on every slip image.
+Run these after every UI or slip change:
 
-## Files Changed
-
-- `app/src/main/java/app/rubjai/mobile/MainActivity.kt`
-  - rebuilt transaction editor UI
-  - added bottom category sheet
-  - changed pending slip approval flow
-  - added app-entry auto sync when consent and permission are already available
-- `app/src/main/java/app/rubjai/mobile/SlipQrReader.kt`
-  - reads slip QR codes with ML Kit barcode scanning
-  - extracts transaction reference, amount, merchant, and bank when present
-  - creates a stable fingerprint from QR reference/raw payload
-- `app/src/main/java/app/rubjai/mobile/AutoSlipScanner.kt`
-  - runs OCR plus QR-first detection for today's images
-  - registers a real-time MediaStore observer while the app is open and sync consent is active
-- `scripts/check-slip-samples.js`
-  - validates expected recipient, amount, date, and time for K PLUS and Dime sample slip text
-- `scripts/check-ui-flow.js`
-  - validates version `3.0.0`
-  - blocks old active home UI calls from returning to the main tab
-  - blocks slip-sync popup regression
-  - confirms the redesigned home timeline components are wired before APK build
-- `CHANGELOG.md`
-  - documents the UI and slip flow update
+- `node scripts/check-text-integrity.js`
+- `node scripts/check-slip-samples.js`
+- `node scripts/check-ui-flow.js`
+- APK build
+- real device/emulator screenshot review when available
 
 ## GitHub Delivery Flow
 
-RubJai updates must be delivered through GitHub, not only built locally.
-
-Required release steps:
-
-1. Login GitHub CLI with the repository owner account.
-   - `gh auth login -h github.com -p https -w`
-   - confirm `gh auth status` shows a valid `repo` token.
-2. Run local checks before commit:
-   - `node scripts/check-text-integrity.js`
-   - `node scripts/check-slip-samples.js`
-   - `node scripts/check-ui-flow.js`
-   - `gradle :app:assembleDebug --build-cache --parallel --stacktrace`
-3. After every UI or slip-parser edit, verify the changed behavior against the reference screenshots/video before committing:
-   - home timeline still uses the dark/yellow RubJai redesign
-   - transaction entry still uses the dark full-screen editor
-   - category picker still uses the white bottom sheet with circular icons
-   - slip sync still stays inline and does not show a completion popup
-   - sample slips still return recipient, amount, date, and time
-4. Do not request a release tag or push a release until the checks and APK build pass.
-5. Commit and push to `main`.
-6. Tag the release, for example `v3.0.0`, and push the tag.
-7. Wait for GitHub Actions to pass.
-8. Confirm GitHub Release assets include:
+1. Commit the exact release scope.
+2. Push `main`.
+3. Push a version tag newer than the installed `versionName`.
+4. Wait for GitHub Actions to pass.
+5. Verify release assets:
    - APK
    - SHA-256
    - `APP_UPDATE_NOTES_TH.md`
-2. Bump Android version.
-   - update `versionCode`
-   - update `versionName`
-   - update README, changelog, English `RELEASE_NOTES.md`, and Thai `APP_UPDATE_NOTES_TH.md` because the in-app update popup displays the Thai asset.
-3. Run a local assemble build as a safety check.
-   - `gradle :app:assembleDebug`
-   - `node scripts/check-text-integrity.js`
-   - `node scripts/check-slip-samples.js`
-4. Commit the exact release scope.
-   - include app code, workflow changes, version files, changelog, release notes, and maintainer notes.
-   - do not commit `app/google-services.json`, signing keys, `.toolchain/`, or `.tools/`.
-5. Push `main`.
-   - GitHub Actions should build an APK artifact for the branch push.
-6. Create and push the version tag.
-   - example: `git tag v2.0.6`
-   - `git push origin v2.0.6`
-7. Let GitHub Actions build the tag.
-   - the tag workflow creates the GitHub Release.
-   - `RELEASE_NOTES.md` is used as the release body.
-   - the release must include the APK and SHA-256 file.
-8. Verify the release page.
-   - check that `v*` exists.
-   - check that the APK asset is attached.
-   - the app update checker reads GitHub Releases, so the tag version must be newer than the installed `versionName`.
+
+GitHub Release notes must be English. In-app update notes must be Thai.

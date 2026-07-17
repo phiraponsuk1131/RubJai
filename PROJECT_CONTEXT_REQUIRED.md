@@ -29,7 +29,7 @@ When starting a new Codex chat/thread for this RubJai project, read the project 
 
 ## Working Rule
 
-Do not assume the old app behavior is still desired. The active direction for RubJai 3.0.0 is:
+Do not assume the old app behavior is still desired. The active direction for RubJai 3.x is:
 
 - RubJai's own dark navy/yellow timeline style
 - QR-first slip parsing
@@ -38,5 +38,7 @@ Do not assume the old app behavior is still desired. The active direction for Ru
 - transaction entry/edit uses the same dark full-screen editor
 - category picker uses a white bottom sheet with circular category icons
 - every change must be validated before push/release
+- after any UI edit, run the UI-flow check and perform a real device/emulator visual check when a device is available
+- saved transaction details must reopen the original slip image from the device through the local `slipUri` link; the image is not uploaded to Firebase
 
 If a request conflicts with these files, ask for confirmation or update the relevant markdown in the same change.

@@ -2,19 +2,41 @@ const fs = require("fs");
 
 const main = fs.readFileSync("app/src/main/java/app/rubjai/mobile/MainActivity.kt", "utf8");
 const build = fs.readFileSync("app/build.gradle.kts", "utf8");
+const launcherForeground = fs.readFileSync("app/src/main/res/drawable/ic_launcher_foreground.xml", "utf8");
 
 function fail(message) {
   console.error(message);
   process.exitCode = 1;
 }
 
-if (!build.includes('versionName = "3.0.0"')) fail("Expected app versionName 3.0.0 for the full UI redesign release.");
+if (!build.includes('versionName = "3.0.1"')) fail("Expected app versionName 3.0.1 for the responsive UI/logo fix release.");
+if (!build.includes("versionCode = 20")) fail("Expected app versionCode 20 for v3.0.1.");
 if (!main.includes("HomeReferenceScreen(")) fail("Home screen must render HomeReferenceScreen.");
 if (!main.includes("HomeSlipSyncBand(")) fail("Slip sync must be displayed inline on the home timeline.");
 if (!main.includes("HomeTimelineRow(")) fail("Home timeline rows with category icons are required.");
 if (!main.includes("ExtendedFloatingActionButton(") || !main.includes('Text("จดเพิ่ม"')) fail("Home add action must use the blue extended จดเพิ่ม button.");
 if (!main.includes("SlipSourceCard(initial.slipUri")) fail("Transaction editor must show the source slip card when a slip image is available.");
 if (!main.includes("FullScreenSlipDialog(initial.slipUri")) fail("Transaction editor must allow opening the source slip full screen.");
+if (!main.includes("R.drawable.rubjai_mark")) fail("The redesigned app must use the new RubJai mark.");
+if (main.includes("R.drawable.rubjai_mascot")) fail("Old square mascot must not be used in active app UI.");
+if (!launcherForeground.includes("@drawable/rubjai_mark")) fail("Launcher foreground must use the new RubJai mark.");
+
+if (main.includes("padding(start = 138.dp)") || main.includes("Modifier.width(138.dp)")) {
+  fail("Home rail must be responsive; fixed 138.dp rail caused narrow vertical text.");
+}
+if (!main.includes("val railWidth = if (maxWidth < 420.dp) 76.dp else 92.dp")) {
+  fail("Home rail must keep the responsive reference-video layout.");
+}
+if (!main.includes("MascotBadge(")) fail("Home mascot/logo must be cropped as a badge, not a large square image.");
+if (!main.includes("Text(moneyPlain(monthExpense)") || !main.includes("modifier = Modifier.weight(1f)")) {
+  fail("Home monthly amount must keep horizontal width and avoid vertical text.");
+}
+if (!main.includes("LocalSlipLinkStore.put(context, item.id, draftValue.slipUri)")) {
+  fail("Editing an entry must preserve the local source-slip link.");
+}
+if (!main.includes("SlipSourceCard(pending.draft.slipUri")) {
+  fail("Pending slip review must preview the source image from the device.");
+}
 
 for (const oldSymbol of [
   "fun RubJaiTopBar",

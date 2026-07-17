@@ -1,10 +1,7 @@
-# RubJai v3.0.0
+# RubJai v3.0.1
 
-- Rebuilt the main home screen into the dark navy/yellow timeline style from the reference flow.
-- Replaced the old active home cards with a month summary card, day rail, daily sections, category-icon rows, and a blue extended add button.
-- Kept slip sync silent: no completion popup. Sync status, scanned count, and pending slips now live inside the home timeline.
-- Updated transaction editing to use the same full-screen dark entry flow for existing records instead of the old cream detail screen.
-- Reworked default expense categories to match the reference picker style and labels more closely.
-- Improved slip recipient parsing so bank/account lines are not selected as the recipient name.
-- Added a GitHub Actions UI-flow gate to catch old home UI calls, popup slip-sync regressions, and version mismatch before APK build.
-- In-app update notes are provided in Thai via `APP_UPDATE_NOTES_TH.md`.
+- Fixed the redesigned home timeline so the yellow month card keeps enough width on phones and Thai labels no longer collapse into vertical text.
+- Replaced the old square mascot usage with a new RubJai wallet mark and updated the launcher foreground to use the new mark.
+- Kept source slip images linked locally from the device when opening or editing saved transactions.
+- Added source-slip previews inside the pending slip review queue before opening the full editor.
+- Strengthened the UI-flow gate to catch the fixed-width rail regression, old mascot usage, missing local slip links, and version mismatch before APK build.

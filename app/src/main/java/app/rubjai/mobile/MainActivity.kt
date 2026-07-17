@@ -27,6 +27,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -68,6 +69,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalContext
@@ -189,8 +191,8 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
         MaterialTheme(colorScheme = colors) {
             Box(Modifier.fillMaxSize().background(RubInk), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    androidx.compose.foundation.Image(painterResource(R.drawable.rubjai_mascot), null, Modifier.size(132.dp))
-                    if (migrationError == null) { CircularProgressIndicator(color = RubMint); Text("กำลังเตรียมน้องรับจ่าย 2.0", color = RubCream) }
+                    androidx.compose.foundation.Image(painterResource(R.drawable.rubjai_mark), null, Modifier.size(132.dp))
+                    if (migrationError == null) { CircularProgressIndicator(color = RubMint); Text("กำลังเตรียม RubJai 3", color = RubCream) }
                     else { Text(migrationError.orEmpty(), color = RubCoral); Button(onClick = { migrationError = null; authRepository.ensureCleanStartV2 { error -> migrationError = error; migrationReady = error == null } }) { Text("ลองอีกครั้ง") } }
                 }
             }
@@ -350,7 +352,13 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
             TransactionDialog(
                 initial = item.toDraft(LocalSlipLinkStore.get(context, item.id)),
                 onDismiss = { selectedEntry = null },
-                onSave = { draftValue -> repository.update(item, draftValue) { error -> message = error ?: "แก้ไขแล้ว"; if (error == null) selectedEntry = null } },
+                onSave = { draftValue ->
+                    repository.update(item, draftValue) { error ->
+                        if (error == null && draftValue.slipUri.isNotBlank()) LocalSlipLinkStore.put(context, item.id, draftValue.slipUri)
+                        message = error ?: "แก้ไขแล้ว"
+                        if (error == null) selectedEntry = null
+                    }
+                },
             )
         }
         availableUpdate?.let { update ->
@@ -440,11 +448,11 @@ private fun OnboardingVisual(page: Int) {
                     1, 5 -> Icon(Icons.Default.ReceiptLong, null, Modifier.size(112.dp), tint = RubMint)
                     2 -> Icon(Icons.Default.PieChart, null, Modifier.size(112.dp), tint = RubCoral)
                     3, 4 -> Icon(Icons.Default.CreditCard, null, Modifier.size(112.dp), tint = RubCream)
-                    else -> androidx.compose.foundation.Image(painterResource(R.drawable.rubjai_mascot), "น้องรับจ่าย", Modifier.size(160.dp), contentScale = ContentScale.Fit)
+                    else -> androidx.compose.foundation.Image(painterResource(R.drawable.rubjai_mark), "น้องรับจ่าย", Modifier.size(160.dp), contentScale = ContentScale.Fit)
                 }
             }
         }
-        if (page != 0) androidx.compose.foundation.Image(painterResource(R.drawable.rubjai_mascot), null, Modifier.align(Alignment.BottomEnd).size(108.dp), contentScale = ContentScale.Fit)
+        if (page != 0) androidx.compose.foundation.Image(painterResource(R.drawable.rubjai_mark), null, Modifier.align(Alignment.BottomEnd).size(108.dp), contentScale = ContentScale.Fit)
     }
 }
 
@@ -458,7 +466,7 @@ private fun UserHub(name: String, entryCount: Int, editProfile: () -> Unit, debt
                     Text("สวัสดี ${name.ifBlank { "คุณ" }}", color = RubEntryNavy.copy(alpha = .82f), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     Text("$entryCount รายการที่บันทึกไว้", color = RubBlue, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black)
                 }
-                androidx.compose.foundation.Image(painterResource(R.drawable.rubjai_mascot), null, Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = 8.dp).size(138.dp))
+                androidx.compose.foundation.Image(painterResource(R.drawable.rubjai_mark), null, Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = 8.dp).size(138.dp))
             }
         }
         UserHubRow(Icons.Default.AccountCircle, "ข้อมูลส่วนตัวและบัญชี", editProfile)
@@ -498,75 +506,92 @@ private fun HomeReferenceScreen(
     val latestTime = latest?.createdAt?.let { SimpleDateFormat("HH:mm", Locale("th", "TH")).format(it) } ?: SimpleDateFormat("HH:mm", Locale("th", "TH")).format(Date())
     val groups = entries.groupBy { homeDayMeta(it) }
 
-    Column(Modifier.fillMaxWidth().background(RubEntryNavy)) {
-        Row(Modifier.fillMaxWidth().padding(start = 138.dp, end = 24.dp, top = 18.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.CalendarMonth, null, tint = RubEntryMuted, modifier = Modifier.size(24.dp))
-            Spacer(Modifier.width(8.dp))
-            Text("จดล่าสุดวันนี้ $latestTime", color = RubEntryMuted, style = MaterialTheme.typography.titleMedium)
-        }
+    BoxWithConstraints(Modifier.fillMaxWidth().background(RubEntryNavy)) {
+        val railWidth = if (maxWidth < 420.dp) 76.dp else 92.dp
+        val sidePadding = if (maxWidth < 420.dp) 16.dp else 24.dp
+        val summaryPadding = if (maxWidth < 420.dp) 22.dp else 32.dp
+        val mascotSize = if (maxWidth < 420.dp) 82.dp else 96.dp
+        Column(Modifier.fillMaxWidth()) {
+            Row(Modifier.fillMaxWidth().padding(start = railWidth + sidePadding, end = sidePadding, top = 18.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.CalendarMonth, null, tint = RubEntryMuted, modifier = Modifier.size(22.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("จดล่าสุดวันนี้ $latestTime", color = RubEntryMuted, style = MaterialTheme.typography.titleMedium, maxLines = 1)
+            }
 
-        Box(Modifier.fillMaxWidth().padding(start = 138.dp)) {
-            Column(Modifier.fillMaxWidth()) {
-                Surface(
-                    Modifier.fillMaxWidth().heightIn(min = 220.dp),
-                    color = RubEntryYellow,
-                    shape = RoundedCornerShape(topStart = 18.dp),
-                ) {
-                    Column(Modifier.padding(start = 40.dp, end = 28.dp, top = 26.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.KeyboardArrowLeft, null, tint = RubBlue, modifier = Modifier.size(42.dp))
-                            Icon(Icons.Default.CalendarMonth, null, tint = RubBlue, modifier = Modifier.size(32.dp))
-                            Spacer(Modifier.width(10.dp))
-                            Text(homeMonthLabel(), color = RubBlue, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black)
-                            Icon(Icons.Default.KeyboardArrowRight, null, tint = RubBlue, modifier = Modifier.size(42.dp))
-                        }
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
-                                Text("ยอดใช้จ่าย", color = RubEntryNavy, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                                Text(moneyPlain(monthExpense), color = RubEntryNavy, style = MaterialTheme.typography.displayMedium, fontWeight = FontWeight.Black)
-                            }
-                            Button(
-                                onClick = {},
-                                colors = ButtonDefaults.buttonColors(containerColor = RubBlue, contentColor = Color.White),
-                                shape = RoundedCornerShape(28.dp),
-                                modifier = Modifier.height(58.dp),
-                            ) {
-                                Icon(Icons.Default.PieChart, null, modifier = Modifier.size(30.dp))
+            Box(Modifier.fillMaxWidth().padding(start = railWidth)) {
+                Column(Modifier.fillMaxWidth()) {
+                    Surface(
+                        Modifier.fillMaxWidth().heightIn(min = 190.dp),
+                        color = RubEntryYellow,
+                        shape = RoundedCornerShape(topStart = 18.dp),
+                    ) {
+                        Column(Modifier.padding(start = summaryPadding, end = sidePadding, top = 24.dp, bottom = 22.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.KeyboardArrowLeft, null, tint = RubBlue, modifier = Modifier.size(34.dp))
+                                Icon(Icons.Default.CalendarMonth, null, tint = RubBlue, modifier = Modifier.size(30.dp))
                                 Spacer(Modifier.width(8.dp))
-                                Text("ดูสรุป", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
+                                Text(homeMonthLabel(), color = RubBlue, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black, maxLines = 1)
+                                Icon(Icons.Default.KeyboardArrowRight, null, tint = RubBlue, modifier = Modifier.size(34.dp))
+                            }
+                            Text("ยอดใช้จ่าย", color = RubEntryNavy, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1)
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                Text(moneyPlain(monthExpense), color = RubEntryNavy, style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Black, maxLines = 1, modifier = Modifier.weight(1f))
+                                Button(
+                                    onClick = {},
+                                    colors = ButtonDefaults.buttonColors(containerColor = RubBlue, contentColor = Color.White),
+                                    shape = RoundedCornerShape(28.dp),
+                                    modifier = Modifier.height(54.dp),
+                                    contentPadding = PaddingValues(horizontal = 16.dp),
+                                ) {
+                                    Icon(Icons.Default.PieChart, null, modifier = Modifier.size(28.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("ดูสรุป", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black, maxLines = 1)
+                                }
                             }
                         }
                     }
+                    HomeSlipSyncBand(syncing, syncScanned, syncStatus, pending, busy, onScan, onSync, onReview)
                 }
-                HomeSlipSyncBand(syncing, syncScanned, syncStatus, pending, busy, onScan, onSync, onReview)
+                MascotBadge(
+                    modifier = Modifier.align(Alignment.TopEnd).padding(end = sidePadding).offset(y = (-42).dp).size(mascotSize)
+                )
             }
-            androidx.compose.foundation.Image(
-                painterResource(R.drawable.rubjai_mascot),
-                contentDescription = null,
-                modifier = Modifier.align(Alignment.TopEnd).padding(end = 18.dp).offset(y = (-70).dp).size(128.dp),
-            )
-        }
 
-        if (groups.isEmpty()) {
-            HomeDaySection(HomeDayMeta("วันนี้", Calendar.getInstance().get(Calendar.DAY_OF_MONTH).toString()), emptyList(), onOpen)
-        } else {
-            groups.forEach { (day, dayEntries) -> HomeDaySection(day, dayEntries, onOpen) }
-        }
+            if (groups.isEmpty()) {
+                HomeDaySection(HomeDayMeta("วันนี้", Calendar.getInstance().get(Calendar.DAY_OF_MONTH).toString()), emptyList(), railWidth, onOpen)
+            } else {
+                groups.forEach { (day, dayEntries) -> HomeDaySection(day, dayEntries, railWidth, onOpen) }
+            }
 
-        Spacer(Modifier.height(14.dp))
-        Button(
-            onClick = onAdd,
-            colors = ButtonDefaults.buttonColors(containerColor = RubBlue, contentColor = Color.White),
-            shape = RoundedCornerShape(32.dp),
-            modifier = Modifier.align(Alignment.End).padding(end = 40.dp, bottom = 24.dp).height(62.dp),
-        ) {
-            Icon(Icons.Default.Edit, null, modifier = Modifier.size(28.dp))
-            Spacer(Modifier.width(10.dp))
-            Text("จดเพิ่ม", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
+            Spacer(Modifier.height(14.dp))
+            Button(
+                onClick = onAdd,
+                colors = ButtonDefaults.buttonColors(containerColor = RubBlue, contentColor = Color.White),
+                shape = RoundedCornerShape(28.dp),
+                modifier = Modifier.align(Alignment.End).padding(end = sidePadding, bottom = 24.dp).height(58.dp),
+                contentPadding = PaddingValues(horizontal = 20.dp),
+            ) {
+                Icon(Icons.Default.Edit, null, modifier = Modifier.size(26.dp))
+                Spacer(Modifier.width(10.dp))
+                Text("จดเพิ่ม", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, maxLines = 1)
+            }
         }
     }
 }
 
+@Composable
+private fun MascotBadge(modifier: Modifier = Modifier) {
+    Surface(modifier, color = RubEntryNavy, shape = CircleShape, shadowElevation = 6.dp) {
+        Box(Modifier.fillMaxSize().padding(4.dp), contentAlignment = Alignment.Center) {
+            androidx.compose.foundation.Image(
+                painterResource(R.drawable.rubjai_mark),
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize().clip(CircleShape),
+                contentScale = ContentScale.Crop,
+            )
+        }
+    }
+}
 @Composable
 private fun HomeSlipSyncBand(syncing: Boolean, scanned: Int, status: String, pending: Int, busy: Boolean, onScan: () -> Unit, onSync: () -> Unit, onReview: () -> Unit) {
     Surface(Modifier.fillMaxWidth(), color = RubEntryTab) {
@@ -604,10 +629,10 @@ private fun HomeSlipSyncBand(syncing: Boolean, scanned: Int, status: String, pen
 }
 
 @Composable
-private fun HomeDaySection(day: HomeDayMeta, entries: List<MoneyTransaction>, onOpen: (MoneyTransaction) -> Unit) {
+private fun HomeDaySection(day: HomeDayMeta, entries: List<MoneyTransaction>, railWidth: androidx.compose.ui.unit.Dp, onOpen: (MoneyTransaction) -> Unit) {
     val expense = entries.filter { it.type == "EXPENSE" }.sumOf { it.amount }
     Row(Modifier.fillMaxWidth()) {
-        Box(Modifier.width(138.dp).fillMaxHeight().background(RubEntryNavy), contentAlignment = Alignment.TopCenter) {
+        Box(Modifier.width(railWidth).fillMaxHeight().background(RubEntryNavy), contentAlignment = Alignment.TopCenter) {
             Column(Modifier.padding(top = 34.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(day.label, color = if (day.label == "วันนี้") RubEntryYellow else Color.White, style = MaterialTheme.typography.titleLarge)
                 Text(day.number, color = Color.White, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black)
@@ -667,7 +692,7 @@ private fun SlipSourceCard(uri: String, title: String, occurredAt: String, open:
         Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) { Text("ข้อมูลจากสลิป", fontWeight = FontWeight.Bold, color = Color(0xFF0B5D5B)); Text(title.ifBlank { "ไม่พบชื่อผู้รับ" }); if (occurredAt.isNotBlank()) Text(occurredAt, style = MaterialTheme.typography.bodySmall, color = Color.Gray); Text("แตะเพื่อดูสลิป", color = Color(0xFFF27D6B), fontWeight = FontWeight.Bold) }
             Spacer(Modifier.width(12.dp))
-            if (bitmap != null) androidx.compose.foundation.Image(bitmap!!.asImageBitmap(), "รูปย่อสลิป", Modifier.size(92.dp), contentScale = ContentScale.Crop) else Surface(Modifier.size(92.dp), color = Color(0xFFCEE5DF), shape = RoundedCornerShape(12.dp)) { Icon(Icons.Default.ImageSearch, null, Modifier.padding(28.dp), tint = Color(0xFF0B5D5B)) }
+            if (bitmap != null) androidx.compose.foundation.Image(bitmap!!.asImageBitmap(), "รูปย่อสลิป", Modifier.size(92.dp).clip(RoundedCornerShape(12.dp)), contentScale = ContentScale.Crop) else Surface(Modifier.size(92.dp), color = Color(0xFFCEE5DF), shape = RoundedCornerShape(12.dp)) { Icon(Icons.Default.ImageSearch, null, Modifier.padding(28.dp), tint = Color(0xFF0B5D5B)) }
         }
     }
 }
@@ -768,7 +793,7 @@ private fun AuthScreen(repository: AuthRepository) {
     Surface(Modifier.fillMaxSize(), color = RubInk) {
         Column(Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
             Box(Modifier.fillMaxWidth().height(280.dp).background(Brush.verticalGradient(listOf(RubCoral, RubCream))), contentAlignment = Alignment.BottomCenter) {
-                androidx.compose.foundation.Image(painterResource(R.drawable.rubjai_mascot), null, Modifier.size(190.dp), contentScale = ContentScale.Fit)
+                MascotBadge(Modifier.size(156.dp))
                 Text(
                     text = "เวอร์ชัน ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
                     modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(12.dp),
@@ -897,6 +922,7 @@ private fun CategoryManagerDialog(close: () -> Unit) {
             items(items, key = { it.id }) { pending ->
                 Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFF4F7FA)), modifier = Modifier.fillMaxWidth().clickable { onReview(pending) }) {
                     Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        if (pending.draft.slipUri.isNotBlank()) SlipSourceCard(pending.draft.slipUri, pending.draft.title, pending.draft.occurredAt) { onReview(pending) }
                         Text(pending.draft.title.ifBlank { "ไม่พบชื่อร้าน/ผู้รับ" }, fontWeight = FontWeight.Bold)
                         Text("${pending.draft.amount} บาท", color = RubBlue, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                         Text(listOf(pending.draft.occurredAt, pending.draft.category).filter(String::isNotBlank).joinToString(" • "), style = MaterialTheme.typography.bodySmall)
