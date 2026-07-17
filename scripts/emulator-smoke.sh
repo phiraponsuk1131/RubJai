@@ -44,8 +44,8 @@ sleep 3
 shot "01-start"
 
 # Walk through onboarding by tapping the primary bottom button.
-for _ in 1 2 3 4 5 6; do
-  adb shell input tap 540 1780
+for _ in 1 2 3 4 5 6 7 8; do
+  adb shell input tap 540 1660
   sleep 0.8
 done
 shot "02-auth"

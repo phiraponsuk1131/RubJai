@@ -75,8 +75,8 @@ Invoke-Adb shell am start -W -n "$PackageName/.MainActivity" | Out-Null
 Start-Sleep -Seconds 3
 Save-Shot "01-start"
 
-foreach ($i in 1..6) {
-  Invoke-Adb shell input tap 540 1780
+foreach ($i in 1..8) {
+  Invoke-Adb shell input tap 540 1660
   Start-Sleep -Milliseconds 800
 }
 Save-Shot "02-auth"
