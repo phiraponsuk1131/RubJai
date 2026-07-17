@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.0.2
+
+- Fixed the Thai in-app update notes so the update popup uses readable Thai text.
+- Kept GitHub Actions focused on checks and APK packaging while local UI smoke testing runs on this machine or a connected device.
+- Added a validation rule that every GitHub push must be tested first with the checks relevant to the change.
+
 ## 2.0.6
 
 - Reworked transaction entry into a full-screen dark navy/yellow editor with an amount card and bottom category grid inspired by the provided reference.

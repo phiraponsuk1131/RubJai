@@ -64,3 +64,14 @@ These checks must be run before every push to GitHub. Do not push first and rely
 ## Release Rule
 
 Do not push a release tag until all required checks, local device/emulator review when available, and the APK build pass. GitHub Release notes must stay English. In-app update notes must stay Thai.
+
+For every new app version, always do the full update path:
+
+1. Bump `versionName` and `versionCode`.
+2. Update `RELEASE_NOTES.md` in English.
+3. Update `APP_UPDATE_NOTES_TH.md` in readable Thai for the in-app update popup.
+4. Run the required validation checks before pushing.
+5. Push to GitHub and wait for the APK workflow to pass.
+6. Create/push the matching `v*` tag only after validation and APK build pass.
+7. Verify the GitHub Release exists, includes the APK, `RubJai.sha256`, and `APP_UPDATE_NOTES_TH.md`.
+8. Confirm the in-app updater can see the new release: latest GitHub Release version must be greater than the installed app version, otherwise the update popup will not show.

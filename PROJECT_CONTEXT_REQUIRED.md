@@ -42,5 +42,6 @@ Do not assume the old app behavior is still desired. The active direction for Ru
 - after any UI edit, run the UI-flow check and perform a real device/emulator visual check when a device is available
 - when no device/emulator is available, run `node scripts/check-ui-layout.js` and inspect `build/ui-preview/home-360.svg` before build/release
 - saved transaction details must reopen the original slip image from the device through the local `slipUri` link; the image is not uploaded to Firebase
+- every new version must complete the full update path in `VALIDATION_CHECKLIST.md`, including Thai update-popup notes and GitHub Release verification
 
 If a request conflicts with these files, ask for confirmation or update the relevant markdown in the same change.
