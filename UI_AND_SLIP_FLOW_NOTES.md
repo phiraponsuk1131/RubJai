@@ -59,14 +59,15 @@ The category picker is a white bottom sheet with:
 
 ## Slip Sync Flow
 
-Slip parsing is QR-first:
+Slip parsing is QR-only for auto-sync and selected slip images:
 
 - scan QR / mini-QR from the slip image first
 - use QR reference/raw payload for duplicate protection
-- prepend QR fields into parse text when available
-- use OCR only as fallback/additional context
-- auto-sync only saves a slip when amount, recipient/title, and date/time are complete
-- incomplete or noisy OCR-only slip names must not be auto-saved as fake recipients
+- use QR amount, merchant name when present, reference, and date/time derived from supported reference formats
+- do not use OCR as a fallback for recipient/title, amount, or auto-sync eligibility
+- auto-sync only saves a slip when QR amount, QR fingerprint/reference, and date/time are complete
+- if QR does not include a recipient name, use a safe QR reference title instead of guessing from OCR
+- incomplete or OCR-only slip names must not be auto-saved as fake recipients
 - real-time sync watches MediaStore while the app is open after consent and permission
 - tests must use synthetic slip text or generated assets only; never commit real slip screenshots or local Downloads paths
 

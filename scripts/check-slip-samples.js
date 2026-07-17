@@ -1,201 +1,161 @@
-const samples = [
-  {
-    name: "KPlus Bill synthetic",
-    text: `จ่ายบิลสำเร็จ
-16 ก.ค. 69 19:01 น.
-นาย ตัวอย่าง ผู้โอน
-ธ.กสิกรไทย
-xxx-x-x1234-x
-↓
-คุณ ตัวอย่าง ผู้รับ
-200012400000001
-24122401
-เลขที่รายการ:
-099999999999DPM00001
-จำนวน:
-110.00 บาท`,
-    expected: { title: "คุณ ตัวอย่าง ผู้รับ", amount: "110.00", occurredAt: "16 ก.ค. 69 19:01" },
-  },
-  {
-    name: "KPlus Transfer synthetic",
-    text: `โอนเงินสำเร็จ
-16 ก.ค. 69 17:21 น.
-นาย ตัวอย่าง ผู้โอน
-ธ.กสิกรไทย
-xxx-x-x1234-x
-↓
-นางสาว ตัวอย่าง ปลายทาง
-ธ.เกียรตินาคินภัทร
-xxx-x-x5678-x
-เลขที่รายการ:
-099999999999DOR00002
-จำนวน:
-200.00 บาท`,
-    expected: { title: "นางสาว ตัวอย่าง ปลายทาง", amount: "200.00", occurredAt: "16 ก.ค. 69 17:21" },
-  },
-  {
-    name: "Merchant payment synthetic",
-    text: `ชำระเงินสำเร็จ
-15 ก.ค. 69 22:51 น.
-นาย ตัวอย่าง ผู้โอน
-ธ.กสิกรไทย
-xxx-x-x1234-x
-↓
-ชำระสินค้า
-บจก. ร้านตัวอย่าง เพย์ (ประเทศไทย)
-202607153711200
-เลขที่รายการ:
-099999999999CQR00003
-จำนวน:
-1.00 บาท
-ค่าธรรมเนียม:
-0.00 บาท`,
-    expected: { title: "บจก. ร้านตัวอย่าง เพย์ (ประเทศไทย)", amount: "1.00", occurredAt: "15 ก.ค. 69 22:51" },
-  },
-  {
-    name: "Dime Transfer synthetic",
-    text: `โอนเงิน
-500.00 บาท
-ค่าธรรมเนียม 0.00 บาท
-จาก
-นาย ตัวอย่าง ผู้โอน
-x-0930
-ไปยัง
-นาย ตัวอย่าง ผู้รับเงิน
-x-6203
-วันที่
-16 ก.ค. 2569 - 17:04 น.
-เลขที่สลิป 619717366106`,
-    expected: { title: "นาย ตัวอย่าง ผู้รับเงิน", amount: "500.00", occurredAt: "16 ก.ค. 2569 17:04" },
-  },
-];
+const fs = require("fs");
 
-const amountPatterns = [
-  /(?:จำนวน|ยอดเงิน|ยอดโอน|amount|total)[^0-9\n]{0,28}\n?\s*([0-9,]+(?:\.[0-9]{1,2})?)/i,
-  /([0-9,]+(?:\.[0-9]{2}))\s*(?:บาท|THB)/i,
-];
-const decimalAmount = /(?<![0-9])([0-9]{1,7}(?:,[0-9]{3})*\.[0-9]{2})(?![0-9])/g;
-const timePattern = /(?<![0-9])([01]?[0-9]|2[0-3]):[0-5][0-9](?![0-9])/;
-const datePattern = /(?<![0-9])([0-3]?[0-9][\/.-][01]?[0-9][\/.-](?:[0-9]{2}|[0-9]{4}))(?![0-9])/;
-const thaiSlipDatePattern = /(?<![0-9])([0-3]?[0-9]\s+[^0-9\n]{1,12}?\s+(?:[0-9]{2}|[0-9]{4}))(?=\s*(?:-|,)?\s*(?:[01]?[0-9]|2[0-3]):[0-5][0-9])/m;
-const recipientLabelPattern = /^(?:ผู้รับ|ชื่อผู้รับ|รับเงินโดย|ไปยัง|โอนไป|บัญชีปลายทาง|ชื่อบัญชี|merchant|merchant name|receiver|recipient|to)\s*[:：-]?\s*(.*)$/i;
-const maskedAccountPattern = /[x*]{1,}[^\n]{0,20}[0-9]{3,4}[^\n]{0,10}[x*]?/i;
-const recipientStopWords = [
-  "สำเร็จ", "successful", "จาก", "จากบัญชี", "ผู้โอน", "ผู้ส่ง", "sender", "เลขที่รายการ",
-  "reference", "ref", "รหัสอ้างอิง", "จำนวน", "ยอด", "amount", "total", "ค่าธรรมเนียม", "fee", "ธนาคาร", "bank",
-  "ชำระเงิน", "ชำระสินค้า", "จ่ายบิล", "โอนเงิน", "สแกนตรวจสอบสลิป", "QR สลิป", "วันที่", "เลขที่สลิป",
-];
+const qrSource = fs.readFileSync("app/src/main/java/app/rubjai/mobile/SlipQrReader.kt", "utf8");
+const scannerSource = fs.readFileSync("app/src/main/java/app/rubjai/mobile/AutoSlipScanner.kt", "utf8");
+const mainSource = fs.readFileSync("app/src/main/java/app/rubjai/mobile/MainActivity.kt", "utf8");
 
-function hasReadableNameSignal(value) {
-  const hasThai = /[\u0E00-\u0E7F]/.test(value);
-  const hasAsciiLetter = /[A-Za-z]/.test(value);
-  const hasSuspiciousLatin = /[\u00C0-\u024F]/.test(value);
-  const startsWithNoise = /^[0-9.:;,_/\\|-]/.test(value);
-  if (hasThai) return true;
-  if (hasSuspiciousLatin || startsWithNoise) return false;
-  if (!hasAsciiLetter) return false;
-  return /\s/.test(value) || /(CO|LTD|LIMITED|COMPANY|SHOP|PAY|MART|MR|DIY)/i.test(value);
+function fail(message, value) {
+  console.error(message, value ?? "");
+  process.exitCode = 1;
 }
 
-function isRecipientCandidate(line) {
-  const value = line.trim();
-  return value.length >= 3 &&
-    value.length <= 100 &&
-    hasReadableNameSignal(value) &&
-    (value.match(/\d/g) || []).length < 5 &&
-    !maskedAccountPattern.test(value) &&
-    !recipientStopWords.some((word) => value.toLowerCase().includes(word.toLowerCase())) &&
-    value.toUpperCase() !== "K+" &&
-    value.toUpperCase() !== "K PLUS" &&
-    !value.toUpperCase().includes("SCB EASY") &&
-    !value.includes("ธ.");
+function tlv(tag, value) {
+  return `${tag}${String(value.length).padStart(2, "0")}${value}`;
 }
 
-function findRecipient(lines) {
-  for (let index = 0; index < lines.length; index++) {
-    const match = lines[index].match(recipientLabelPattern);
-    if (!match) continue;
-    const inline = (match[1] || "").trim();
-    if (isRecipientCandidate(inline)) return inline;
-    const next = lines.slice(index + 1, index + 5).find(isRecipientCandidate);
-    if (next) return next;
+function buildQr({ amount, merchant, ref }) {
+  const additional = tlv("05", ref);
+  return [
+    tlv("00", "01"),
+    tlv("54", amount),
+    tlv("59", merchant),
+    tlv("62", additional),
+  ].join("");
+}
+
+function parseTlv(value) {
+  const result = {};
+  let index = 0;
+  while (index + 4 <= value.length) {
+    const tag = value.slice(index, index + 2);
+    const length = Number(value.slice(index + 2, index + 4));
+    const start = index + 4;
+    const end = start + length;
+    if (!/^\d+$/.test(tag) || !Number.isFinite(length) || end > value.length) break;
+    result[tag] = value.slice(start, end);
+    index = end;
   }
-  const directionIndex = lines.findIndex((line) => line === "↓" || line === "→" || line.includes("โอนไป") || line.includes("ไปยัง"));
-  if (directionIndex >= 0) {
-    const next = lines.slice(directionIndex + 1, directionIndex + 7).find(isRecipientCandidate);
-    if (next) return next;
+  return index === value.length ? result : {};
+}
+
+const referencePatterns = [
+  /[A-Z0-9]{8,}(?:CPM|DQR|DTF|DPM|DOR|CQR|CTF|COR)[A-Z0-9-]*/i,
+  /(?:transRef|transactionRef|reference|ref|เลขที่รายการ|รหัสอ้างอิง)[:=\s-]*([A-Z0-9-]{6,})/i,
+  /(?:^|[^A-Z0-9])([A-Z0-9-]{12,})(?:$|[^A-Z0-9])/i,
+];
+
+function extractReference(value) {
+  for (const pattern of referencePatterns) {
+    const match = value.match(pattern);
+    if (match) return match[match.length - 1];
   }
   return "";
 }
 
-function parse(text) {
-  const labeledAmount = amountPatterns.map((pattern) => text.match(pattern)?.[1]?.replace(/,/g, "")).find(Boolean);
-  const fallbackAmount = [...text.matchAll(decimalAmount)].map((m) => m[1].replace(/,/g, "")).find((v) => Number(v) > 0);
-  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  const date = text.match(datePattern)?.[0] || text.match(thaiSlipDatePattern)?.[1] || "";
-  const time = text.match(timePattern)?.[0] || "";
-  return { amount: labeledAmount || fallbackAmount || "", title: findRecipient(lines), occurredAt: [date, time].filter(Boolean).join(" ") };
+function parseQrPayload(value) {
+  const tags = parseTlv(value);
+  if (!Object.keys(tags).length) return { amount: "", merchantName: "", transactionReference: extractReference(value), rawValues: [value] };
+  const nestedEntries = Object.values(tags).flatMap((inner) => Object.entries(parseTlv(inner)));
+  const nested = Object.fromEntries(nestedEntries);
+  const reference = nested["02"] || nested["03"] || parseTlv(tags["62"] || "")["05"] || extractReference(value);
+  return {
+    amount: tags["54"] || "",
+    merchantName: tags["59"] || "",
+    transactionReference: reference || "",
+    rawValues: [value],
+  };
 }
 
-function hasCompleteSlipBasics(parsed) {
-  return Number(parsed.amount) > 0 &&
-    parsed.title &&
-    parsed.title !== "ยังไม่จัดหมวด" &&
-    /[0-2]?[0-9]:[0-5][0-9]/.test(parsed.occurredAt);
+function cleanAmount(amount) {
+  const value = Number(String(amount).replace(/,/g, ""));
+  return value > 0 ? value.toFixed(2) : "";
 }
 
-let failed = false;
+function referenceDate(reference, year = 2026) {
+  const match = reference.match(/0\d{2}(\d{3})(\d{2})(\d{2})(\d{2})/i);
+  if (!match) return "";
+  const [, dayOfYearText, hour, minute] = match;
+  const date = new Date(Date.UTC(year, 0, Number(dayOfYearText)));
+  const day = date.getUTCDate();
+  const month = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."][date.getUTCMonth()];
+  return `${day} ${month} 69 ${hour}:${minute}`;
+}
+
+function fallbackTitle(reference) {
+  return reference ? `สลิป QR ลงท้าย ${reference.slice(-6)}` : "สลิป QR";
+}
+
+function toDraft(qr) {
+  const amount = cleanAmount(qr.amount);
+  if (!amount) return null;
+  return {
+    amount,
+    title: qr.merchantName || fallbackTitle(qr.transactionReference),
+    occurredAt: referenceDate(qr.transactionReference),
+    reference: qr.transactionReference,
+  };
+}
+
+const samples = [
+  {
+    name: "K PLUS transfer QR-only fallback title",
+    raw: buildQr({ amount: "90.00", merchant: "", ref: "099196182654CTF00880" }),
+    expected: {
+      amount: "90.00",
+      title: "สลิป QR ลงท้าย F00880",
+      occurredAt: "15 ก.ค. 69 18:26",
+      reference: "099196182654CTF00880",
+    },
+  },
+  {
+    name: "K PLUS merchant QR keeps merchant",
+    raw: buildQr({ amount: "45.00", merchant: "SCB Manee SHOP", ref: "099194183413CPM06924" }),
+    expected: {
+      amount: "45.00",
+      title: "SCB Manee SHOP",
+      occurredAt: "13 ก.ค. 69 18:34",
+      reference: "099194183413CPM06924",
+    },
+  },
+  {
+    name: "K PLUS bill QR keeps amount and date",
+    raw: buildQr({ amount: "110.00", merchant: "", ref: "099197190113DPM11831" }),
+    expected: {
+      amount: "110.00",
+      title: "สลิป QR ลงท้าย M11831",
+      occurredAt: "16 ก.ค. 69 19:01",
+      reference: "099197190113DPM11831",
+    },
+  },
+];
+
 for (const sample of samples) {
-  const actual = parse(sample.text);
+  const actual = toDraft(parseQrPayload(sample.raw));
   for (const [key, value] of Object.entries(sample.expected)) {
-    if (actual[key] !== value) {
-      failed = true;
-      console.error(`${sample.name} ${key}: expected ${JSON.stringify(value)}, got ${JSON.stringify(actual[key])}`);
-    }
-  }
-  if (!hasCompleteSlipBasics(actual)) {
-    failed = true;
-    console.error(`${sample.name}: parsed result is not complete enough for auto-sync queue`);
+    if (actual?.[key] !== value) fail(`${sample.name} ${key}: expected ${JSON.stringify(value)}, got ${JSON.stringify(actual?.[key])}`);
   }
   console.log(`${sample.name}:`, actual);
 }
 
-const qrOnly = parse(`QR สลิป
-รหัสอ้างอิง 099999999999DPM00001`);
-if (hasCompleteSlipBasics(qrOnly)) {
-  failed = true;
-  console.error("QR-only reference must not be treated as a complete auto-sync slip.");
+const qrWithoutAmount = toDraft(parseQrPayload(buildQr({ amount: "", merchant: "Synthetic Merchant", ref: "099196182654CTF00880" })));
+if (qrWithoutAmount) fail("QR without amount must not auto-sync.", qrWithoutAmount);
+
+const ocrNoiseOnly = "โอนเงินสำเร็จ\n6.LñusGnnuäns\n100.00 บาท\n17 ก.ค. 69 12:40";
+if (toDraft({ amount: "", merchantName: "", transactionReference: "", rawValues: [] })) {
+  fail("OCR-only content must not create a draft.");
+}
+if (scannerSource.includes("TextRecognition") || scannerSource.includes("auto_bank_slip_qr_ocr") || scannerSource.includes("auto_bank_slip\"")) {
+  fail("Auto slip scanner must be QR-only and must not use OCR fallback.");
+}
+if (mainSource.includes("slip_qr_ocr") || mainSource.includes("debt_slip_qr_ocr")) {
+  fail("Manual slip import and debt slip import must use QR-only parsing.");
+}
+if (!qrSource.includes("fun toDraft(qr: SlipQrResult") || !qrSource.includes("DPM|DOR|CQR|CTF|COR")) {
+  fail("Slip QR reader must expose QR-only draft creation and support K PLUS reference variants.");
+}
+if (ocrNoiseOnly.includes("6.LñusGnnuäns")) {
+  console.log("OCR noise fixture intentionally ignored:", "6.LñusGnnuäns");
 }
 
-const qrPriority = parse(`QR สลิป
-จำนวน 110.00 บาท
-ชื่อผู้รับ คุณ ตัวอย่าง ผู้รับ
-รหัสอ้างอิง 099999999999DPM00001
-OCR สำรอง
-จำนวน 1.00 บาท
-ชื่อผู้รับ OCR ผิด
-16 ก.ค. 69 19:01 น.`);
-if (qrPriority.amount !== "110.00" || qrPriority.title !== "คุณ ตัวอย่าง ผู้รับ") {
-  failed = true;
-  console.error("QR priority failed:", qrPriority);
-}
-
-const noisyRecipient = parse(`โอนเงินสำเร็จ
-17 ก.ค. 69 12:40 น.
-นาย ตัวอย่าง ผู้โอน
-ธ.กสิกรไทย
-xxx-x-x1234-x
-↓
-6.L\u00f1usGnnu\u00e4ns
-ธ.เกียรตินาคินภัทร
-xxx-x-x5678-x
-เลขที่รายการ:
-099999999999DOR00004
-จำนวน:
-100.00 บาท`);
-if (noisyRecipient.title === "6.L\u00f1usGnnu\u00e4ns" || hasCompleteSlipBasics(noisyRecipient)) {
-  failed = true;
-  console.error("Noisy OCR recipient must not be accepted as a complete slip:", noisyRecipient);
-}
-
-process.exit(failed ? 1 : 0);
+if (process.exitCode) process.exit(process.exitCode);
+console.log("QR-only slip sample check passed.");

@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.0.4
+
+- Changed auto slip sync and manual slip import to QR-only parsing.
+- Added QR reference date/time extraction for K PLUS-style references and safe fallback titles when QR payloads do not include recipient names.
+- Hid previously saved noisy OCR-style titles from the timeline and slip source cards.
+- Tightened the transaction editor sizing so controls are more balanced on narrow phone screens.
+
 ## 3.0.3
 
 - Stopped using account-ending fallback text as a slip recipient name.

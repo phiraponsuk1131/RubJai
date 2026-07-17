@@ -13,10 +13,6 @@ import androidx.work.WorkManager
 import androidx.work.Worker
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
-import com.google.android.gms.tasks.Tasks
-import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.text.TextRecognition
-import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Calendar
@@ -69,7 +65,7 @@ object PendingSlipStore {
             optString("amount"),
             optString("title"),
             TransactionType.EXPENSE,
-            "auto_bank_slip",
+            "auto_bank_slip_qr",
             optString("rawText"),
             optString("category", "ยังไม่จัดหมวด"),
             optString("remark"),
@@ -119,14 +115,7 @@ object KPlusSyncManager {
 }
 
 class KPlusScanWorker(context: Context, params: WorkerParameters) : Worker(context, params) {
-    private val parserVersion = "slip-v3.0.3-no-account-ending-title-1"
-    private val kPlusReference = Regex("[0-9]{10,}(?:CPM|DQR|DTF)[0-9]+", RegexOption.IGNORE_CASE)
-    private val genericReference = Regex("(?i)(?:เลขที่รายการ|reference|transaction id|รหัสอ้างอิง)[^\\n]{0,50}[A-Z0-9-]{6,}")
-    private val supportedApps = listOf(
-        "K+", "K PLUS", "SCB EASY", "Krungthai NEXT", "เป๋าตัง", "ttb touch",
-        "Krungsri", "KMA", "Bualuang", "Bangkok Bank", "CIMB", "UOB",
-        "TrueMoney", "G-Wallet", "MAKE by KBank", "MyMo", "ออมสิน",
-    )
+    private val parserVersion = "slip-v3.0.4-qr-only-1"
 
     override fun doWork(): Result {
         if (!KPlusSyncManager.hasConsent(applicationContext)) return Result.success()
@@ -151,58 +140,39 @@ class KPlusScanWorker(context: Context, params: WorkerParameters) : Worker(conte
         val cursor = runCatching {
             applicationContext.contentResolver.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, projection, selection, arrayOf(since.toString(), before.toString()), "${MediaStore.Images.Media.DATE_ADDED} DESC")
         }.getOrNull() ?: return Result.success()
-        val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
         var found = 0
-        try {
-            cursor.use {
-                val idColumn = it.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
-                val dateColumn = it.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_ADDED)
-                var scanned = 0
-                while (it.moveToNext() && scanned < 1000) {
-                    val id = it.getLong(idColumn)
-                    val mediaKey = "$parserVersion:$id"
-                    if (PendingSlipStore.isProcessed(applicationContext, mediaKey)) continue
-                    scanned++
-                    setProgressAsync(workDataOf("scanned" to scanned))
-                    val uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id)
-                    val imageDate = Date(it.getLong(dateColumn) * 1000)
-                    runCatching {
-                        val image = InputImage.fromFilePath(applicationContext, uri)
-                        val ocrText = Tasks.await(recognizer.process(image)).text
-                        val qr = SlipQrReader.scanBlocking(applicationContext, uri)
-                        val text = SlipQrReader.appendToOcrText(ocrText, qr)
-                        val looksLikeSlip = qr.rawValues.isNotEmpty() ||
-                            qr.transactionReference.isNotBlank() ||
-                            supportedApps.any { app -> text.contains(app, true) } ||
-                            kPlusReference.containsMatchIn(text) ||
-                            genericReference.containsMatchIn(text) ||
-                            ((text.contains("สำเร็จ") || text.contains("successful", true)) &&
-                                (text.contains("จำนวน") || text.contains("amount", true)) &&
-                                (text.contains("บาท") || text.contains("THB", true)))
-                        val fingerprint = SlipQrReader.fingerprint(qr)
-                        val draft = if (looksLikeSlip) {
-                            SlipParser.parse(text, if (qr.rawValues.isNotEmpty()) "auto_bank_slip_qr_ocr" else "auto_bank_slip", imageDate)
-                                .copy(slipUri = uri.toString(), slipFingerprint = fingerprint)
-                        } else null
-                        if (draft != null && draft.hasCompleteSlipBasics()) {
-                            PendingSlipStore.add(applicationContext, mediaKey, draft)
-                            found++
-                        } else {
-                            PendingSlipStore.markProcessed(applicationContext, mediaKey)
-                        }
+        cursor.use {
+            val idColumn = it.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
+            val dateColumn = it.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_ADDED)
+            var scanned = 0
+            while (it.moveToNext() && scanned < 1000) {
+                val id = it.getLong(idColumn)
+                val mediaKey = "$parserVersion:$id"
+                if (PendingSlipStore.isProcessed(applicationContext, mediaKey)) continue
+                scanned++
+                setProgressAsync(workDataOf("scanned" to scanned))
+                val uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id)
+                val imageDate = Date(it.getLong(dateColumn) * 1000)
+                runCatching {
+                    val qr = SlipQrReader.scanBlocking(applicationContext, uri)
+                    val draft = SlipQrReader.toDraft(qr, "auto_bank_slip_qr", imageDate)
+                        ?.copy(slipUri = uri.toString())
+                    if (draft != null && draft.hasCompleteSlipBasics()) {
+                        PendingSlipStore.add(applicationContext, mediaKey, draft)
+                        found++
+                    } else {
+                        PendingSlipStore.markProcessed(applicationContext, mediaKey)
                     }
                 }
             }
-        } finally {
-            recognizer.close()
         }
         return Result.success(workDataOf("found" to found))
     }
 
     private fun DraftTransaction.hasCompleteSlipBasics(): Boolean {
         val hasAmount = amount.toDoubleOrNull()?.let { it > 0 } == true
-        val hasTitle = title.isNotBlank() && title != category && title != "ยังไม่จัดหมวด"
+        val hasQrFingerprint = slipFingerprint.isNotBlank()
         val hasDateTime = occurredAt.isNotBlank() && Regex("[0-2]?[0-9]:[0-5][0-9]").containsMatchIn(occurredAt)
-        return hasAmount && hasTitle && hasDateTime
+        return hasAmount && hasQrFingerprint && hasDateTime
     }
 }

@@ -9,8 +9,8 @@ function fail(message) {
   process.exitCode = 1;
 }
 
-if (!build.includes('versionName = "3.0.3"')) fail("Expected app versionName 3.0.3 for the slip/UI hotfix release.");
-if (!build.includes("versionCode = 22")) fail("Expected app versionCode 22 for v3.0.3.");
+if (!build.includes('versionName = "3.0.4"')) fail("Expected app versionName 3.0.4 for the QR-only slip sync release.");
+if (!build.includes("versionCode = 23")) fail("Expected app versionCode 23 for v3.0.4.");
 if (!main.includes("HomeReferenceScreen(")) fail("Home screen must render HomeReferenceScreen.");
 if (!main.includes("HomeSlipSyncBand(")) fail("Slip sync must be displayed inline on the home timeline.");
 if (!main.includes("HomeTimelineRow(")) fail("Home timeline rows with category icons are required.");

@@ -32,8 +32,8 @@ When starting a new Codex chat/thread for this RubJai project, read the project 
 Do not assume the old app behavior is still desired. The active direction for RubJai 3.x is:
 
 - RubJai's own dark navy/yellow timeline style
-- QR-first slip parsing
-- OCR only as fallback/additional context
+- QR-only slip parsing for auto-sync and selected slip images
+- OCR must not create recipient/title data
 - no slip-sync completion popup
 - transaction entry/edit uses the same dark full-screen editor
 - category picker uses a white bottom sheet with circular category icons

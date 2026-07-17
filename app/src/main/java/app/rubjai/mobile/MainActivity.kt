@@ -15,6 +15,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
@@ -80,9 +81,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
-import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.text.TextRecognition
-import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.PhoneAuthCredential
@@ -94,6 +92,7 @@ import java.util.Locale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
 import java.util.UUID
 
 class MainActivity : ComponentActivity() {
@@ -137,6 +136,7 @@ private val RubRed = Color(0xFF63D9B7)
 private val RubEntryMuted = Color(0xFFA8C8C2)
 
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
     val context = LocalContext.current
     val authRepository = remember { AuthRepository() }
@@ -223,6 +223,7 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
     var pendingToReview by remember { mutableStateOf<PendingSlip?>(null) }
     var selectedEntry by remember { mutableStateOf<MoneyTransaction?>(null) }
     var mainTab by remember { mutableIntStateOf(0) }
+    val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) {
         repository.observe { entries = it }
         draft = sharedDraft(launchIntent)
@@ -245,7 +246,7 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
     LaunchedEffect(pendingSlips) {
         pendingSlips.forEach { pending ->
             val cleanTitle = cleanSlipTitle(pending.draft.title)
-            val ready = cleanTitle.isNotBlank() && pending.draft.amount.toDoubleOrNull()?.let { it > 0.0 } == true && pending.draft.occurredAt.isNotBlank()
+            val ready = pending.draft.slipFingerprint.isNotBlank() && pending.draft.amount.toDoubleOrNull()?.let { it > 0.0 } == true && pending.draft.occurredAt.isNotBlank()
             if (!ready) {
                 PendingSlipStore.remove(context, pending.id)
                 pendingSlips = PendingSlipStore.load(context)
@@ -253,7 +254,7 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
             }
             if (pending.id !in autoSavingPendingIds) {
                 autoSavingPendingIds.add(pending.id)
-                val savedDraft = pending.draft.copy(title = cleanTitle)
+                val savedDraft = pending.draft.copy(title = cleanTitle.ifBlank { pending.draft.title })
                 repository.add(savedDraft) { error ->
                     autoSavingPendingIds.remove(pending.id)
                     if (error == null || error.contains("DUPLICATE_SLIP", true) || error.contains("บันทึกแล้ว", true)) {
@@ -273,18 +274,14 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
         if (uri != null) {
             busy = true
             runCatching { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
-            val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
-            recognizer.process(InputImage.fromFilePath(context, uri))
-                .addOnSuccessListener { result ->
+            scope.launch {
+                val parsed = withContext(Dispatchers.IO) {
                     val qr = runCatching { SlipQrReader.scanBlocking(context, uri) }.getOrDefault(SlipQrResult())
-                    val text = SlipQrReader.appendToOcrText(result.text, qr)
-                    val parsed = SlipParser.parse(text, if (qr.rawValues.isNotEmpty()) "slip_qr_ocr" else "slip_ocr", imageDate(context, uri))
-                    val fingerprint = SlipQrReader.fingerprint(qr)
-                    if (parsed.amount.toDoubleOrNull()?.let { it > 0 } == true || fingerprint.isNotBlank()) draft = parsed.copy(slipUri = uri.toString(), slipFingerprint = fingerprint) else message = "อ่านยอดจากรูปไม่พบ กรุณาเลือกภาพสลิปที่ชัดเจน"
-                    busy = false
-                    recognizer.close()
+                    SlipQrReader.toDraft(qr, "slip_qr", imageDate(context, uri))?.copy(slipUri = uri.toString())
                 }
-                .addOnFailureListener { error -> message = "อ่านสลิปไม่สำเร็จ: ${error.localizedMessage}"; busy = false; recognizer.close() }
+                if (parsed != null) draft = parsed else message = "อ่าน QR จากสลิปไม่พบ กรุณาเลือกภาพสลิปที่มี QR ชัดเจน"
+                busy = false
+            }
         }
     }
     val scanPermission = if (android.os.Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_IMAGES else Manifest.permission.READ_EXTERNAL_STORAGE
@@ -337,8 +334,11 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
             }
         ) { padding ->
             val visibleEntries = remember(entries, entryPeriod, entryKind) { entries.filterFor(entryPeriod, entryKind) }
-            LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(top = 18.dp, bottom = 116.dp), verticalArrangement = Arrangement.spacedBy(0.dp)) {
+            LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 116.dp), verticalArrangement = Arrangement.spacedBy(0.dp)) {
                 if (mainTab == 0) {
+                    stickyHeader {
+                        HomeStickySummaryHeader(entries)
+                    }
                     item {
                         HomeReferenceScreen(
                             entries = visibleEntries,
@@ -380,7 +380,7 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
             )
         }
         message?.let { AlertDialog(onDismissRequest = { message = null }, confirmButton = { TextButton(onClick = { message = null }) { Text("ตกลง") } }, text = { Text(it) }) }
-        if (showSyncConsent) AlertDialog(onDismissRequest = { showSyncConsent = false }, title = { Text("ยินยอมสแกนสลิปวันนี้?") }, text = { Text("RubJai จะอ่านรูปที่เพิ่มในวันนี้เพื่อหาสลิปธนาคารและวอลเล็ตด้วย OCR บนเครื่อง ผลจะอยู่ในคิวรออนุมัติและยังไม่บันทึกจนกว่าคุณจะยืนยัน") }, confirmButton = { Button(onClick = { KPlusSyncManager.setConsent(context, true); syncConsent = true; showSyncConsent = false; if (ContextCompat.checkSelfPermission(context, scanPermission) == PackageManager.PERMISSION_GRANTED) startKPlusSync() else permissionLauncher.launch(scanPermission) }) { Text("ยินยอมและสแกน") } }, dismissButton = { TextButton(onClick = { showSyncConsent = false }) { Text("ยังไม่ยินยอม") } })
+        if (showSyncConsent) AlertDialog(onDismissRequest = { showSyncConsent = false }, title = { Text("ยินยอมซิงค์สลิปจาก QR?") }, text = { Text("RubJai จะค้นหารูปย้อนหลัง 1 เดือนและอ่านเฉพาะ QR บนสลิปเพื่อบันทึกยอด เวลา และเลขอ้างอิง รูปสลิปยังอยู่ในเครื่องและไม่ถูกอัปโหลด") }, confirmButton = { Button(onClick = { KPlusSyncManager.setConsent(context, true); syncConsent = true; showSyncConsent = false; if (ContextCompat.checkSelfPermission(context, scanPermission) == PackageManager.PERMISSION_GRANTED) startKPlusSync() else permissionLauncher.launch(scanPermission) }) { Text("ยินยอมและซิงค์") } }, dismissButton = { TextButton(onClick = { showSyncConsent = false }) { Text("ยังไม่ยินยอม") } })
         if (showPending) PendingSlipDialog(pendingSlips, onClose = { showPending = false }, onReview = { pendingToReview = it }, onReject = { pending -> PendingSlipStore.remove(context, pending.id); pendingSlips = PendingSlipStore.load(context); if (pendingSlips.isEmpty()) showPending = false })
         selectedEntry?.let { item ->
             TransactionDialog(
@@ -534,62 +534,12 @@ private fun HomeReferenceScreen(
     onOpen: (MoneyTransaction) -> Unit,
     onAdd: () -> Unit,
 ) {
-    val expenseEntries = allEntries.filter { it.type == "EXPENSE" }
-    val monthExpense = expenseEntries.sumOf { it.amount }
-    val latest = allEntries.maxByOrNull { it.createdAt?.time ?: 0L }
-    val latestTime = latest?.createdAt?.let { SimpleDateFormat("HH:mm", Locale("th", "TH")).format(it) } ?: SimpleDateFormat("HH:mm", Locale("th", "TH")).format(Date())
     val groups = entries.groupBy { homeDayMeta(it) }
 
     BoxWithConstraints(Modifier.fillMaxWidth().background(RubEntryNavy)) {
         val railWidth = if (maxWidth < 420.dp) 76.dp else 92.dp
-        val sidePadding = if (maxWidth < 420.dp) 16.dp else 24.dp
-        val summaryPadding = if (maxWidth < 420.dp) 22.dp else 32.dp
-        val mascotSize = if (maxWidth < 420.dp) 82.dp else 96.dp
         Column(Modifier.fillMaxWidth()) {
-            Row(Modifier.fillMaxWidth().padding(start = railWidth + sidePadding, end = sidePadding, top = 18.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.CalendarMonth, null, tint = RubEntryMuted, modifier = Modifier.size(22.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("จดล่าสุดวันนี้ $latestTime", color = RubEntryMuted, style = MaterialTheme.typography.titleMedium, maxLines = 1)
-            }
-
-            Box(Modifier.fillMaxWidth().padding(start = railWidth)) {
-                Column(Modifier.fillMaxWidth()) {
-                    Surface(
-                        Modifier.fillMaxWidth().heightIn(min = 190.dp),
-                        color = RubEntryYellow,
-                        shape = RoundedCornerShape(topStart = 18.dp),
-                    ) {
-                        Column(Modifier.padding(start = summaryPadding, end = sidePadding, top = 24.dp, bottom = 22.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.KeyboardArrowLeft, null, tint = RubBlue, modifier = Modifier.size(34.dp))
-                                Icon(Icons.Default.CalendarMonth, null, tint = RubBlue, modifier = Modifier.size(30.dp))
-                                Spacer(Modifier.width(8.dp))
-                                Text(homeMonthLabel(), color = RubBlue, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black, maxLines = 1)
-                                Icon(Icons.Default.KeyboardArrowRight, null, tint = RubBlue, modifier = Modifier.size(34.dp))
-                            }
-                            Text("ยอดใช้จ่าย", color = RubEntryNavy, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1)
-                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                                Text(moneyPlain(monthExpense), color = RubEntryNavy, style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Black, maxLines = 1, modifier = Modifier.weight(1f))
-                                Button(
-                                    onClick = {},
-                                    colors = ButtonDefaults.buttonColors(containerColor = RubBlue, contentColor = Color.White),
-                                    shape = RoundedCornerShape(28.dp),
-                                    modifier = Modifier.height(54.dp),
-                                    contentPadding = PaddingValues(horizontal = 16.dp),
-                                ) {
-                                    Icon(Icons.Default.PieChart, null, modifier = Modifier.size(28.dp))
-                                    Spacer(Modifier.width(6.dp))
-                                    Text("ดูสรุป", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black, maxLines = 1)
-                                }
-                            }
-                        }
-                    }
-                    HomeSlipSyncBand(syncing, syncScanned, syncStatus, pending, busy, onScan, onSync, onReview)
-                }
-                MascotBadge(
-                    modifier = Modifier.align(Alignment.TopEnd).padding(end = sidePadding).offset(y = (-42).dp).size(mascotSize)
-                )
-            }
+            HomeSlipSyncBand(syncing, syncScanned, syncStatus, pending, busy, onScan, onSync, onReview)
 
             if (groups.isEmpty()) {
                 HomeDaySection(HomeDayMeta("วันนี้", Calendar.getInstance().get(Calendar.DAY_OF_MONTH).toString()), emptyList(), railWidth, onOpen)
@@ -598,6 +548,51 @@ private fun HomeReferenceScreen(
             }
 
             Spacer(Modifier.height(90.dp))
+        }
+    }
+}
+
+@Composable
+private fun HomeStickySummaryHeader(allEntries: List<MoneyTransaction>) {
+    val expenseEntries = allEntries.filter { it.type == "EXPENSE" }
+    val monthExpense = expenseEntries.sumOf { it.amount }
+    BoxWithConstraints(Modifier.fillMaxWidth().background(RubEntryYellow)) {
+        val sidePadding = if (maxWidth < 420.dp) 18.dp else 28.dp
+        val amountStyle = if (maxWidth < 420.dp) MaterialTheme.typography.headlineLarge else MaterialTheme.typography.displaySmall
+        Surface(Modifier.fillMaxWidth(), color = RubEntryYellow) {
+            Column(
+                Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = sidePadding, vertical = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    MascotBadge(Modifier.size(34.dp))
+                    Spacer(Modifier.weight(1f))
+                    Icon(Icons.Default.KeyboardArrowLeft, null, tint = RubBlue, modifier = Modifier.size(34.dp))
+                    Icon(Icons.Default.CalendarMonth, null, tint = RubBlue, modifier = Modifier.size(28.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(homeMonthLabel(), color = RubBlue, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, maxLines = 1)
+                    Icon(Icons.Default.KeyboardArrowRight, null, tint = RubBlue, modifier = Modifier.size(34.dp))
+                    Spacer(Modifier.weight(1f))
+                    Icon(Icons.Default.CreditCard, null, tint = RubEntryNavy, modifier = Modifier.size(30.dp))
+                }
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("ยอดใช้จ่าย", color = RubEntryNavy, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 1)
+                        Text(moneyPlain(monthExpense), color = RubEntryNavy, style = amountStyle, fontWeight = FontWeight.Black, maxLines = 1)
+                    }
+                    Button(
+                        onClick = {},
+                        colors = ButtonDefaults.buttonColors(containerColor = RubBlue, contentColor = Color.White),
+                        shape = RoundedCornerShape(28.dp),
+                        modifier = Modifier.height(50.dp),
+                        contentPadding = PaddingValues(horizontal = 14.dp),
+                    ) {
+                        Icon(Icons.Default.PieChart, null, modifier = Modifier.size(26.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("ดูสรุป", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black, maxLines = 1)
+                    }
+                }
+            }
         }
     }
 }
@@ -712,6 +707,7 @@ private fun HomeDaySection(day: HomeDayMeta, entries: List<MoneyTransaction>, ra
 @Composable
 private fun HomeTimelineRow(item: MoneyTransaction, onOpen: (MoneyTransaction) -> Unit) {
     val visual = categoryVisual(item.category)
+    val safeTitle = cleanSlipTitle(item.title)
     Row(
         Modifier.fillMaxWidth().background(RubEntryCard).clickable { onOpen(item) }.padding(horizontal = 28.dp, vertical = 20.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -722,7 +718,7 @@ private fun HomeTimelineRow(item: MoneyTransaction, onOpen: (MoneyTransaction) -
         Spacer(Modifier.width(18.dp))
         Column(Modifier.weight(1f)) {
             Text(item.category.ifBlank { "ยังไม่จัดหมวด" }, color = Color.White, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
-            Text(item.title.ifBlank { "ไม่ระบุรายการ" }, color = Color.White.copy(alpha = 0.82f), style = MaterialTheme.typography.titleMedium, maxLines = 1)
+            Text(safeTitle.ifBlank { if (item.source.contains("slip", true)) "สลิป QR" else "ไม่ระบุรายการ" }, color = Color.White.copy(alpha = 0.82f), style = MaterialTheme.typography.bodyLarge, maxLines = 1)
         }
         Text(moneyPlain(item.amount), color = Color.White, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
     }
@@ -735,9 +731,15 @@ private fun SlipSourceCard(uri: String, title: String, occurredAt: String, open:
     LaunchedEffect(uri) { bitmap = withContext(Dispatchers.IO) { runCatching { context.contentResolver.openInputStream(Uri.parse(uri))?.use(BitmapFactory::decodeStream) }.getOrNull() } }
     Card(Modifier.fillMaxWidth().clickable(onClick = open), colors = CardDefaults.cardColors(containerColor = Color(0xFFE5F2EF))) {
         Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) { Text("ข้อมูลจากสลิป", fontWeight = FontWeight.Bold, color = Color(0xFF0B5D5B)); Text(title.ifBlank { "ไม่พบชื่อผู้รับ" }); if (occurredAt.isNotBlank()) Text(occurredAt, style = MaterialTheme.typography.bodySmall, color = Color.Gray); Text("แตะเพื่อดูสลิป", color = Color(0xFFF27D6B), fontWeight = FontWeight.Bold) }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                val safeTitle = cleanSlipTitle(title)
+                Text("ข้อมูลจากสลิป", fontWeight = FontWeight.Bold, color = Color(0xFF0B5D5B), style = MaterialTheme.typography.titleMedium)
+                Text(safeTitle.ifBlank { "สลิป QR" }, style = MaterialTheme.typography.bodyLarge, maxLines = 2)
+                if (occurredAt.isNotBlank()) Text(occurredAt, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                Text("แตะเพื่อดูสลิป", color = Color(0xFFF27D6B), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+            }
             Spacer(Modifier.width(12.dp))
-            if (bitmap != null) androidx.compose.foundation.Image(bitmap!!.asImageBitmap(), "รูปย่อสลิป", Modifier.size(92.dp).clip(RoundedCornerShape(12.dp)), contentScale = ContentScale.Crop) else Surface(Modifier.size(92.dp), color = Color(0xFFCEE5DF), shape = RoundedCornerShape(12.dp)) { Icon(Icons.Default.ImageSearch, null, Modifier.padding(28.dp), tint = Color(0xFF0B5D5B)) }
+            if (bitmap != null) androidx.compose.foundation.Image(bitmap!!.asImageBitmap(), "รูปย่อสลิป", Modifier.size(82.dp).clip(RoundedCornerShape(12.dp)), contentScale = ContentScale.Crop) else Surface(Modifier.size(82.dp), color = Color(0xFFCEE5DF), shape = RoundedCornerShape(12.dp)) { Icon(Icons.Default.ImageSearch, null, Modifier.padding(24.dp), tint = Color(0xFF0B5D5B)) }
         }
     }
 }
@@ -766,19 +768,19 @@ private fun FullScreenSlipDialog(uri: String, close: () -> Unit) {
 @Composable
 private fun DebtPlannerScreen(onClose: () -> Unit) {
     val context = LocalContext.current; val repository = remember { DebtRepository() }
+    val scope = rememberCoroutineScope()
     var debts by remember { mutableStateOf(emptyList<Debt>()) }; var create by remember { mutableStateOf(false) }; var selected by remember { mutableStateOf<Debt?>(null) }; var target by remember { mutableStateOf<Debt?>(null) }; var draft by remember { mutableStateOf<DraftTransaction?>(null) }; var message by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) { repository.observe { updated -> debts = updated; selected = selected?.let { current -> updated.firstOrNull { it.id == current.id } } } }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null) {
             runCatching { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
-            val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
-            recognizer.process(InputImage.fromFilePath(context, uri)).addOnSuccessListener { result ->
-                val qr = runCatching { SlipQrReader.scanBlocking(context, uri) }.getOrDefault(SlipQrResult())
-                val text = SlipQrReader.appendToOcrText(result.text, qr)
-                val parsed = SlipParser.parse(text, if (qr.rawValues.isNotEmpty()) "debt_slip_qr_ocr" else "debt_slip", imageDate(context, uri)).copy(slipUri = uri.toString(), slipFingerprint = SlipQrReader.fingerprint(qr))
-                if (parsed.amount.toDoubleOrNull()?.let { it > 0 } == true) draft = parsed else message = "อ่านยอดจากสลิปไม่พบ กรุณาเลือกสลิปที่ชัดเจน"
-                recognizer.close()
-            }.addOnFailureListener { message = "อ่านสลิปไม่สำเร็จ"; recognizer.close() }
+            scope.launch {
+                val parsed = withContext(Dispatchers.IO) {
+                    val qr = runCatching { SlipQrReader.scanBlocking(context, uri) }.getOrDefault(SlipQrResult())
+                    SlipQrReader.toDraft(qr, "debt_slip_qr", imageDate(context, uri))?.copy(slipUri = uri.toString())
+                }
+                if (parsed != null) draft = parsed else message = "อ่าน QR จากสลิปไม่พบ กรุณาเลือกภาพสลิปที่มี QR ชัดเจน"
+            }
         }
     }
     Column(Modifier.fillMaxSize()) {
@@ -1031,20 +1033,20 @@ private fun TransactionDialog(initial: DraftTransaction, onDismiss: () -> Unit, 
                         Text(initial.occurredAt.ifBlank { thaiTodayLabel() }, color = RubBlue, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black)
                     }
 
-                    Surface(Modifier.fillMaxWidth().height(148.dp), color = RubEntryCard, shape = RoundedCornerShape(8.dp)) {
-                        Row(Modifier.fillMaxSize().padding(horizontal = 28.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(if (mode == TransactionType.INCOME) Icons.Default.ArrowDownward else Icons.Default.ArrowUpward, null, tint = accent, modifier = Modifier.size(56.dp))
-                            Spacer(Modifier.width(22.dp))
+                    Surface(Modifier.fillMaxWidth().height(124.dp), color = RubEntryCard, shape = RoundedCornerShape(8.dp)) {
+                        Row(Modifier.fillMaxSize().padding(horizontal = 22.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(if (mode == TransactionType.INCOME) Icons.Default.ArrowDownward else Icons.Default.ArrowUpward, null, tint = accent, modifier = Modifier.size(46.dp))
+                            Spacer(Modifier.width(16.dp))
                             OutlinedTextField(
                                 value = amount,
                                 onValueChange = { amount = it.filter { c -> c.isDigit() || c == '.' }.take(12) },
                                 modifier = Modifier.weight(1f),
-                                textStyle = MaterialTheme.typography.displayMedium.copy(color = Color.White, fontWeight = FontWeight.Light),
+                                textStyle = MaterialTheme.typography.displaySmall.copy(color = Color.White, fontWeight = FontWeight.Light),
                                 singleLine = true,
-                                placeholder = { Text("0", color = Color.White.copy(alpha = 0.55f), style = MaterialTheme.typography.displayMedium) },
+                                placeholder = { Text("0", color = Color.White.copy(alpha = 0.55f), style = MaterialTheme.typography.displaySmall) },
                                 colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color.Transparent, unfocusedBorderColor = Color.Transparent, cursorColor = RubBlue, focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent),
                             )
-                            Text("฿", color = Color.White.copy(alpha = 0.55f), style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
+                            Text("฿", color = Color.White.copy(alpha = 0.55f), style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
                         }
                     }
 
@@ -1109,11 +1111,11 @@ private fun EntryField(icon: androidx.compose.ui.graphics.vector.ImageVector, te
     OutlinedTextField(
         value = text,
         onValueChange = onChange,
-        modifier = Modifier.fillMaxWidth().heightIn(min = 68.dp),
-        leadingIcon = { Icon(icon, null, tint = RubBlue, modifier = Modifier.size(32.dp)) },
+        modifier = Modifier.fillMaxWidth().heightIn(min = 60.dp),
+        leadingIcon = { Icon(icon, null, tint = RubBlue, modifier = Modifier.size(26.dp)) },
         placeholder = { Text(placeholder, color = RubBlue, fontWeight = FontWeight.Bold) },
         singleLine = true,
-        textStyle = MaterialTheme.typography.titleLarge.copy(color = Color.White, fontWeight = FontWeight.Bold),
+        textStyle = MaterialTheme.typography.titleMedium.copy(color = Color.White, fontWeight = FontWeight.Bold),
         shape = RoundedCornerShape(8.dp),
         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = RubBlue, unfocusedBorderColor = RubBlue, cursorColor = RubBlue, focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent),
     )
@@ -1122,15 +1124,15 @@ private fun EntryField(icon: androidx.compose.ui.graphics.vector.ImageVector, te
 @Composable
 private fun EntrySelectField(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String, onClick: () -> Unit) {
     Surface(
-        Modifier.fillMaxWidth().height(72.dp).clickable(onClick = onClick),
+        Modifier.fillMaxWidth().height(62.dp).clickable(onClick = onClick),
         color = Color.Transparent,
         shape = RoundedCornerShape(8.dp),
         border = BorderStroke(1.5.dp, RubBlue),
     ) {
-        Row(Modifier.fillMaxSize().padding(horizontal = 22.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, null, tint = RubBlue, modifier = Modifier.size(34.dp))
-            Spacer(Modifier.width(20.dp))
-            Text(text, color = RubBlue, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, modifier = Modifier.weight(1f))
+        Row(Modifier.fillMaxSize().padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, null, tint = RubBlue, modifier = Modifier.size(28.dp))
+            Spacer(Modifier.width(16.dp))
+            Text(text, color = RubBlue, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black, maxLines = 1, modifier = Modifier.weight(1f))
         }
     }
 }
@@ -1278,5 +1280,27 @@ private fun moneyPlain(value: Double) = NumberFormat.getNumberInstance(Locale("t
 
 private fun cleanSlipTitle(title: String): String {
     val trimmed = title.trim()
-    return if (trimmed.startsWith("โอนไปบัญชีลงท้าย")) "" else trimmed
+    if (trimmed.isBlank()) return ""
+    if (trimmed.startsWith("โอนไปบัญชีลงท้าย")) return ""
+    if (trimmed.any { it in '\u00C0'..'\u024F' }) return ""
+    if (looksLikeBrokenOcrName(trimmed)) return ""
+    return trimmed
+}
+
+private fun looksLikeBrokenOcrName(value: String): Boolean {
+    val hasThai = value.any { it in '\u0E00'..'\u0E7F' }
+    if (hasThai) return false
+    val letters = value.filter { it.isLetter() }
+    if (letters.length < 4) return true
+    val upper = value.uppercase(Locale.US)
+    val knownBusiness = listOf("SCB", "SHOP", "MART", "PAY", "CO", "LTD", "LIMITED", "COMPANY", "MR", "DIY", "KFC", "LOTUS", "BIG C")
+        .any { upper.contains(it) }
+    val lowercaseRuns = Regex("[a-z]{2,}").findAll(value).count()
+    val shortMixedTokens = value.split(Regex("\\s+")).count { token ->
+        token.any(Char::isUpperCase) && token.any(Char::isLowerCase) && token.length in 2..8
+    }
+    if (knownBusiness) return shortMixedTokens >= 2 || Regex("\\([A-Za-z]{4,}\\)").containsMatchIn(value)
+    if (shortMixedTokens >= 1 && lowercaseRuns >= 1) return true
+    val vowels = letters.count { it.lowercaseChar() in listOf('a', 'e', 'i', 'o', 'u') }
+    return vowels == 0 || lowercaseRuns >= 2
 }

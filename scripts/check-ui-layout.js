@@ -35,6 +35,10 @@ if (!main.includes('HomeDayMeta("วันนี้"') || !main.includes("Text(d
   fail("Home timeline must keep the video-style left date rail with day label and day number.");
 }
 
+if (!main.includes("stickyHeader") || !main.includes("HomeStickySummaryHeader(entries)")) {
+  fail("Home month summary must use a sticky header so the tab/header remains visible while scrolling.");
+}
+
 const previewDir = path.join("build", "ui-preview");
 fs.mkdirSync(previewDir, { recursive: true });
 

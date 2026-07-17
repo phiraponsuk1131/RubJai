@@ -1,8 +1,10 @@
-# RubJai v3.0.3
+# RubJai v3.0.4
 
-- Fixed slip recipient handling so account-ending fallback text is no longer treated as a recipient name.
-- Complete auto-synced slips are saved into their own slip date automatically without a sync-complete popup.
-- Incomplete or noisy OCR slip names are not saved as fake recipients; the app waits for a cleaner QR/OCR result instead.
-- Removed the duplicate home add button so the home timeline keeps one main floating add action.
-- Improved bottom navigation contrast so labels remain readable.
-- Replaced the RubJai mark with the selected minimal check logo on a pure white background.
+- Changed slip auto-sync to QR-only so noisy OCR text is never saved as a recipient or merchant name.
+- Added K PLUS-style QR reference date/time extraction so synced slips land on their own transaction date.
+- Uses QR payload amount, merchant when available, reference, and fingerprint for duplicate protection.
+- Falls back to a safe QR reference title when the QR payload does not include a recipient name, instead of guessing from OCR.
+- Hides previously saved noisy OCR-style names from timeline and slip cards so broken text does not remain visible.
+- Added a sticky month summary header so the month tab, spending total, and summary action remain available while scrolling the timeline.
+- Tightened the transaction editor proportions so amount, title, category, and note controls fit better on phone screens.
+- Updated validation to block OCR-based auto-sync regressions before APK build and release.

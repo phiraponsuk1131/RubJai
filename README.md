@@ -1,11 +1,18 @@
-# RubJai 3.0.3
+# RubJai 3.0.4
 
 RubJai คือแอป Android สำหรับบันทึกรายรับ รายจ่าย สรุปการใช้เงิน และวางแผนปลดหนี้ พัฒนาด้วย Kotlin และ Jetpack Compose
 
 - ชื่อผู้ช่วยในแอป: **น้องรับจ่าย**
 - Package: `app.rubjai.mobile`
 - minSdk 23 / targetSdk 35
-- versionCode 22 / versionName 3.0.3
+- versionCode 23 / versionName 3.0.4
+
+## RubJai 3.0.4 QR-only Slip Rule
+
+- Auto-sync scans the latest 31 days and real-time new images, but it saves only slips with readable QR data.
+- OCR must not be used to create the recipient/title, amount, or sync eligibility.
+- If the QR payload does not include a recipient name, RubJai uses a safe QR reference title and keeps the local source-slip link for review/editing.
+- Test fixtures must use synthetic QR references only; never commit real slip screenshots, videos, local Downloads paths, or real transaction references.
 
 ## การใช้งานหลัก
 

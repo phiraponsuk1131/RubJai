@@ -29,13 +29,13 @@ These checks must be run before every push to GitHub. Do not push first and rely
 
 3. Slip sample parsing
    - Run `node scripts/check-slip-samples.js`
-   - Must extract recipient/name, amount, date, and time from the sample K PLUS / Dime cases.
-   - QR data is primary. OCR is fallback/context only.
+   - Must extract QR amount, supported QR merchant names, reference, date, and time from synthetic K PLUS-style cases.
+   - QR data is the only source for slip auto-sync and selected slip import. OCR must not create recipient/title data.
 
 4. Redesigned UI flow guard
    - Run `node scripts/check-ui-flow.js`
    - Must confirm:
-     - app version is `3.0.3`
+     - app version is `3.0.4`
      - home renders `HomeReferenceScreen`
      - the home rail is responsive, not fixed at the broken wide value
      - the new RubJai mark is used instead of the old square mascot
