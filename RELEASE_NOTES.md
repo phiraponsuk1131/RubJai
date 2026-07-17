@@ -1,10 +1,9 @@
-# RubJai v3.0.4
+# RubJai v3.0.5
 
-- Changed slip auto-sync to QR-only so noisy OCR text is never saved as a recipient or merchant name.
-- Added K PLUS-style QR reference date/time extraction so synced slips land on their own transaction date.
-- Uses QR payload amount, merchant when available, reference, and fingerprint for duplicate protection.
-- Falls back to a safe QR reference title when the QR payload does not include a recipient name, instead of guessing from OCR.
-- Hides previously saved noisy OCR-style names from timeline and slip cards so broken text does not remain visible.
-- Added a sticky month summary header so the month tab, spending total, and summary action remain available while scrolling the timeline.
-- Tightened the transaction editor proportions so amount, title, category, and note controls fit better on phone screens.
-- Updated validation to block OCR-based auto-sync regressions before APK build and release.
+- Improved QR slip detection by retrying with cropped, upscaled, and rotated image candidates when the QR is not detected from the full image.
+- Added support for QR payloads that expose amount outside EMV tag `54`, including `amount`, `amt`, `total`, `THB`, `BAHT`, and Thai amount labels.
+- Added safe recipient-name extraction from explicit QR fields such as `recipient`, `receiver`, `toName`, `merchant`, `name`, and Thai recipient labels.
+- Rejects unsafe or reference-like QR name values so transaction titles do not become broken OCR-style text.
+- Rescans previously skipped gallery images with a new QR parser key.
+- Raises the one-month sync scan cap to 3000 images so busy galleries can surface more real slips.
+- Keeps the app QR-only for slip sync and manual slip import; OCR is still not used for amount, date, time, or recipient names.

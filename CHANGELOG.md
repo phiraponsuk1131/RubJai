@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.0.5
+
+- Made QR slip scanning less brittle by retrying with cropped, upscaled, and rotated bitmap candidates when ML Kit cannot read the QR from the full image.
+- Added QR raw-payload amount extraction for non-standard QR payloads that include `amount`, `amt`, `total`, `THB`, `BAHT`, or Thai amount labels outside EMV tag `54`.
+- Added safe QR recipient-name extraction from QR fields such as `recipient`, `receiver`, `toName`, `merchant`, and Thai recipient labels while rejecting unsafe reference-like names.
+- Bumped the auto-slip parser key so previously skipped gallery images are rescanned with the improved QR reader.
+- Increased the one-month sync scan cap from 1000 to 3000 images so busy galleries are less likely to miss older slips inside the 31-day window.
+
 ## 3.0.4
 
 - Changed auto slip sync and manual slip import to QR-only parsing.

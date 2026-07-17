@@ -17,6 +17,14 @@ Read these files before code changes:
 
 These checks must be run before every push to GitHub. Do not push first and rely on GitHub Actions to discover issues. For markdown-only edits, at minimum run the text and privacy checks; for app, UI, slip, sync, icon/logo, workflow, version, or release edits, run the full relevant checklist before pushing.
 
+Use the shortest safe validation path:
+
+- markdown-only edits: run Thai text integrity and privacy checks only
+- code edits that do not touch UI/slip/release: run the directly relevant static checks plus APK build when Android code changed
+- UI, slip QR, sync, icon/logo, version, update popup, workflow, or release edits: run the full relevant checklist below before pushing
+- never push, tag, or release before local checks pass
+- keep the final report concise: changed files/behavior, tests, APK/release link, and blockers only
+
 1. Thai text integrity
    - Run `node scripts/check-text-integrity.js`
    - Must pass with no mojibake or replacement characters.

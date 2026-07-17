@@ -1,6 +1,9 @@
 package app.rubjai.mobile
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Matrix
 import android.net.Uri
 import com.google.android.gms.tasks.Tasks
 import com.google.mlkit.vision.barcode.BarcodeScannerOptions
@@ -28,6 +31,14 @@ object SlipQrReader {
         Regex("(?i)(?:^|[^A-Z0-9])([A-Z0-9-]{12,})(?:$|[^A-Z0-9])"),
     )
     private val kPlusReferenceDatePattern = Regex("0[0-9]{2}([0-9]{3})([0-9]{2})([0-9]{2})([0-9]{2})", RegexOption.IGNORE_CASE)
+    private val amountPatterns = listOf(
+        Regex("(?i)(?:amount|amt|total|thb|baht|จำนวน|ยอด|บาท)[:=\\s]*([0-9][0-9,]*(?:\\.[0-9]{1,2})?)"),
+        Regex("([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s*(?i:THB|BAHT|บาท)"),
+    )
+    private val recipientPatterns = listOf(
+        Regex("(?i)(?:recipient|receiver|toName|to_name|merchant|merchantName|name)[:=\\s]+([^\\n&|;]{2,80})"),
+        Regex("(?:ชื่อผู้รับ|ผู้รับ|ไปยัง|ร้านค้า|ชื่อร้าน)[:=\\s]+([^\\n&|;]{2,80})"),
+    )
 
     fun scanBlocking(context: Context, uri: Uri): SlipQrResult {
         val scanner = BarcodeScanning.getClient(
@@ -36,9 +47,8 @@ object SlipQrReader {
                 .build()
         )
         return try {
-            val values = Tasks.await(scanner.process(InputImage.fromFilePath(context, uri)))
-                .mapNotNull { it.rawValue?.trim() }
-                .filter(String::isNotBlank)
+            val values = scanValues(scanner, InputImage.fromFilePath(context, uri))
+                .ifEmpty { scanBitmapFallbacks(context, uri, scanner) }
                 .distinct()
             val parsed = values.map(::parseQrPayload)
             SlipQrResult(
@@ -52,6 +62,61 @@ object SlipQrReader {
         } finally {
             scanner.close()
         }
+    }
+
+    private fun scanValues(scanner: com.google.mlkit.vision.barcode.BarcodeScanner, image: InputImage): List<String> =
+        Tasks.await(scanner.process(image))
+            .mapNotNull { it.rawValue?.trim() }
+            .filter(String::isNotBlank)
+
+    private fun scanBitmapFallbacks(context: Context, uri: Uri, scanner: com.google.mlkit.vision.barcode.BarcodeScanner): List<String> {
+        val source = context.contentResolver.openInputStream(uri)?.use(BitmapFactory::decodeStream) ?: return emptyList()
+        val values = mutableListOf<String>()
+        try {
+            val candidates = buildBitmapCandidates(source)
+            candidates.forEach { bitmap ->
+                listOf(0, 90, 180, 270).forEach { rotation ->
+                    val rotated = if (rotation == 0) bitmap else bitmap.rotate(rotation.toFloat())
+                    values += scanValues(scanner, InputImage.fromBitmap(rotated, 0))
+                    if (rotated !== bitmap) rotated.recycle()
+                    if (values.isNotEmpty()) return values.distinct()
+                }
+            }
+        } finally {
+            source.recycle()
+        }
+        return values.distinct()
+    }
+
+    private fun buildBitmapCandidates(source: Bitmap): List<Bitmap> {
+        val candidates = mutableListOf<Bitmap>()
+        candidates += source
+        candidates += source.cropFraction(0.45f, 0.45f, 0.55f, 0.55f)
+        candidates += source.cropFraction(0.35f, 0.50f, 0.65f, 0.50f)
+        candidates += source.cropFraction(0.50f, 0.35f, 0.50f, 0.65f)
+        return candidates
+            .filter { it.width >= 80 && it.height >= 80 }
+            .map { it.upscaleForQr() }
+    }
+
+    private fun Bitmap.cropFraction(leftFraction: Float, topFraction: Float, widthFraction: Float, heightFraction: Float): Bitmap {
+        val left = (width * leftFraction).toInt().coerceIn(0, width - 1)
+        val top = (height * topFraction).toInt().coerceIn(0, height - 1)
+        val cropWidth = (width * widthFraction).toInt().coerceIn(1, width - left)
+        val cropHeight = (height * heightFraction).toInt().coerceIn(1, height - top)
+        return Bitmap.createBitmap(this, left, top, cropWidth, cropHeight)
+    }
+
+    private fun Bitmap.upscaleForQr(): Bitmap {
+        val maxSide = maxOf(width, height)
+        if (maxSide >= 1200) return this
+        val scale = (1200f / maxSide).coerceIn(1f, 3f)
+        return Bitmap.createScaledBitmap(this, (width * scale).toInt(), (height * scale).toInt(), true)
+    }
+
+    private fun Bitmap.rotate(degrees: Float): Bitmap {
+        val matrix = Matrix().apply { postRotate(degrees) }
+        return Bitmap.createBitmap(this, 0, 0, width, height, matrix, true)
     }
 
     fun appendToOcrText(text: String, qr: SlipQrResult): String {
@@ -114,6 +179,28 @@ object SlipQrReader {
         return "%.2f".format(Locale.US, value)
     }
 
+    private fun extractAmount(value: String): String =
+        amountPatterns.firstNotNullOfOrNull { pattern ->
+            pattern.find(value)?.groupValues?.getOrNull(1)?.cleanQrAmount()?.takeIf(String::isNotBlank)
+        }.orEmpty()
+
+    private fun extractRecipientName(value: String): String =
+        recipientPatterns.firstNotNullOfOrNull { pattern ->
+            pattern.find(value)?.groupValues?.getOrNull(1)
+                ?.trim()
+                ?.trim('"', '\'', ' ', '\t')
+                ?.takeIf(::isSafeQrName)
+        }.orEmpty()
+
+    private fun isSafeQrName(value: String): Boolean {
+        if (value.length !in 2..80) return false
+        if (value.any { it.code < 32 }) return false
+        if (value.contains("http", ignoreCase = true)) return false
+        if (value.contains("amount", ignoreCase = true) || value.contains("ref", ignoreCase = true)) return false
+        if (value.count { it.isDigit() } > value.length / 2) return false
+        return true
+    }
+
     private fun qrFallbackTitle(reference: String): String {
         val suffix = reference.takeLast(6).takeIf(String::isNotBlank)
         return suffix?.let { "สลิป QR ลงท้าย $it" } ?: "สลิป QR"
@@ -148,6 +235,7 @@ object SlipQrReader {
     private fun parseQrPayload(value: String): SlipQrResult {
         val tags = parseTlv(value)
         if (tags.isEmpty()) return SlipQrResult(transactionReference = extractReference(value).orEmpty())
+            .copy(amount = extractAmount(value), merchantName = extractRecipientName(value))
         val nested = tags.values.flatMap { parseTlv(it).entries }.associate { it.key to it.value }
         val reference = nested["02"].orEmpty()
             .ifBlank { nested["03"].orEmpty() }
@@ -155,8 +243,8 @@ object SlipQrReader {
             .ifBlank { extractReference(value).orEmpty() }
         return SlipQrResult(
             transactionReference = reference,
-            amount = tags["54"].orEmpty(),
-            merchantName = tags["59"].orEmpty(),
+            amount = tags["54"].orEmpty().ifBlank { extractAmount(value) },
+            merchantName = tags["59"].orEmpty().ifBlank { extractRecipientName(value) },
             sendingBank = nested["01"].orEmpty().takeIf { it.length == 3 }.orEmpty(),
         )
     }

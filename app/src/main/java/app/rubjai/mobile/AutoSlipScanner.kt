@@ -115,7 +115,7 @@ object KPlusSyncManager {
 }
 
 class KPlusScanWorker(context: Context, params: WorkerParameters) : Worker(context, params) {
-    private val parserVersion = "slip-v3.0.4-qr-only-1"
+    private val parserVersion = "slip-v3.0.5-qr-only-1"
 
     override fun doWork(): Result {
         if (!KPlusSyncManager.hasConsent(applicationContext)) return Result.success()
@@ -145,7 +145,7 @@ class KPlusScanWorker(context: Context, params: WorkerParameters) : Worker(conte
             val idColumn = it.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
             val dateColumn = it.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_ADDED)
             var scanned = 0
-            while (it.moveToNext() && scanned < 1000) {
+            while (it.moveToNext() && scanned < 3000) {
                 val id = it.getLong(idColumn)
                 val mediaKey = "$parserVersion:$id"
                 if (PendingSlipStore.isProcessed(applicationContext, mediaKey)) continue

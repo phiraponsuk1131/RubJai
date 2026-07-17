@@ -64,6 +64,9 @@ Slip parsing is QR-only for auto-sync and selected slip images:
 - scan QR / mini-QR from the slip image first
 - use QR reference/raw payload for duplicate protection
 - use QR amount, merchant name when present, reference, and date/time derived from supported reference formats
+- retry QR scanning with cropped/upscaled/rotated bitmap candidates when the full slip image does not decode
+- accept QR raw payloads that expose amount outside EMV tag `54` through amount/amt/total/THB/BAHT/Thai amount labels
+- accept recipient names only from explicit QR name fields such as recipient/receiver/toName/merchant/name or Thai recipient labels, and reject unsafe reference-like values
 - do not use OCR as a fallback for recipient/title, amount, or auto-sync eligibility
 - auto-sync only saves a slip when QR amount, QR fingerprint/reference, and date/time are complete
 - if QR does not include a recipient name, use a safe QR reference title instead of guessing from OCR

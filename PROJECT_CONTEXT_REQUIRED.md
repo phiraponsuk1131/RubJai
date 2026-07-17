@@ -29,6 +29,18 @@ When starting a new Codex chat/thread for this RubJai project, read the project 
 
 ## Working Rule
 
+## Speed Rule For Future Changes
+
+Keep future change cycles short and direct:
+
+- read the required markdown first, then edit without re-explaining the whole project
+- change only the files needed for the user's current request
+- test locally before any commit, push, tag, or release
+- for markdown-only edits, run only the minimum relevant checks unless the edit changes release behavior
+- for UI/slip/version/release edits, run the relevant local validation first, then push only after it passes
+- summarize only the changed behavior, validation result, release/build link, and any real blocker
+- do not repeat long design rationale unless the user asks for it
+
 Do not assume the old app behavior is still desired. The active direction for RubJai 3.x is:
 
 - RubJai's own dark navy/yellow timeline style

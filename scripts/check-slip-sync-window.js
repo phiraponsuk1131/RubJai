@@ -20,7 +20,7 @@ if (!scanner.includes("registerContentObserver(MediaStore.Images.Media.EXTERNAL_
 if (!scanner.includes("MIN_REALTIME_GAP_MS = 3_000L")) {
   fail("Real-time slip sync must be throttled.");
 }
-if (!scanner.includes("scanned < 1000")) {
+if (!scanner.includes("scanned < 3000")) {
   fail("One-month slip sync needs a larger scan cap than the old today-only limit.");
 }
 if (!main.includes("กำลังค้นหาสลิปย้อนหลัง 1 เดือน")) {

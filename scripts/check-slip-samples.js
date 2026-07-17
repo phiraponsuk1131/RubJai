@@ -54,16 +54,51 @@ function extractReference(value) {
 
 function parseQrPayload(value) {
   const tags = parseTlv(value);
-  if (!Object.keys(tags).length) return { amount: "", merchantName: "", transactionReference: extractReference(value), rawValues: [value] };
+  if (!Object.keys(tags).length) return { amount: extractAmount(value), merchantName: extractRecipientName(value), transactionReference: extractReference(value), rawValues: [value] };
   const nestedEntries = Object.values(tags).flatMap((inner) => Object.entries(parseTlv(inner)));
   const nested = Object.fromEntries(nestedEntries);
   const reference = nested["02"] || nested["03"] || parseTlv(tags["62"] || "")["05"] || extractReference(value);
   return {
-    amount: tags["54"] || "",
-    merchantName: tags["59"] || "",
+    amount: tags["54"] || extractAmount(value),
+    merchantName: tags["59"] || extractRecipientName(value),
     transactionReference: reference || "",
     rawValues: [value],
   };
+}
+
+function extractAmount(value) {
+  const patterns = [
+    /(?:amount|amt|total|thb|baht|จำนวน|ยอด|บาท)[:=\s]*([0-9][0-9,]*(?:\.[0-9]{1,2})?)/i,
+    /([0-9][0-9,]*(?:\.[0-9]{1,2})?)\s*(?:THB|BAHT|บาท)/i,
+  ];
+  for (const pattern of patterns) {
+    const match = value.match(pattern);
+    const amount = cleanAmount(match?.[1] || "");
+    if (amount) return amount;
+  }
+  return "";
+}
+
+function extractRecipientName(value) {
+  const patterns = [
+    /(?:recipient|receiver|toName|to_name|merchant|merchantName|name)[:=\s]+([^\n&|;]{2,80})/i,
+    /(?:ชื่อผู้รับ|ผู้รับ|ไปยัง|ร้านค้า|ชื่อร้าน)[:=\s]+([^\n&|;]{2,80})/,
+  ];
+  for (const pattern of patterns) {
+    const match = value.match(pattern);
+    const name = String(match?.[1] || "").trim().replace(/^["'\s]+|["'\s]+$/g, "");
+    if (isSafeQrName(name)) return name;
+  }
+  return "";
+}
+
+function isSafeQrName(value) {
+  if (value.length < 2 || value.length > 80) return false;
+  if (/https?:\/\//i.test(value)) return false;
+  if (/amount|ref/i.test(value)) return false;
+  const digits = (value.match(/\d/g) || []).length;
+  if (digits > value.length / 2) return false;
+  return true;
 }
 
 function cleanAmount(amount) {
@@ -127,6 +162,26 @@ const samples = [
       reference: "099197190113DPM11831",
     },
   },
+  {
+    name: "Plain QR keeps amount and date without TLV",
+    raw: "ref=099196182654CTF00880&amount=90.00&currency=THB",
+    expected: {
+      amount: "90.00",
+      title: "สลิป QR ลงท้าย F00880",
+      occurredAt: "15 ก.ค. 69 18:26",
+      reference: "099196182654CTF00880",
+    },
+  },
+  {
+    name: "Plain QR keeps Thai recipient name",
+    raw: "ref=099196182654CTF00880&amount=90.00&toName=นาย มนัส ถึกมี&currency=THB",
+    expected: {
+      amount: "90.00",
+      title: "นาย มนัส ถึกมี",
+      occurredAt: "15 ก.ค. 69 18:26",
+      reference: "099196182654CTF00880",
+    },
+  },
 ];
 
 for (const sample of samples) {
@@ -144,13 +199,17 @@ const ocrNoiseOnly = "โอนเงินสำเร็จ\n6.LñusGnnuäns\n
 if (toDraft({ amount: "", merchantName: "", transactionReference: "", rawValues: [] })) {
   fail("OCR-only content must not create a draft.");
 }
+const noisyNameQr = toDraft(parseQrPayload("ref=099196182654CTF00880&amount=90.00&name=ref=099196182654CTF00880"));
+if (noisyNameQr?.title !== "สลิป QR ลงท้าย F00880") {
+  fail("Unsafe QR name fields must not become transaction titles.", noisyNameQr);
+}
 if (scannerSource.includes("TextRecognition") || scannerSource.includes("auto_bank_slip_qr_ocr") || scannerSource.includes("auto_bank_slip\"")) {
   fail("Auto slip scanner must be QR-only and must not use OCR fallback.");
 }
 if (mainSource.includes("slip_qr_ocr") || mainSource.includes("debt_slip_qr_ocr")) {
   fail("Manual slip import and debt slip import must use QR-only parsing.");
 }
-if (!qrSource.includes("fun toDraft(qr: SlipQrResult") || !qrSource.includes("DPM|DOR|CQR|CTF|COR")) {
+if (!qrSource.includes("fun toDraft(qr: SlipQrResult") || !qrSource.includes("DPM|DOR|CQR|CTF|COR") || !qrSource.includes("scanBitmapFallbacks")) {
   fail("Slip QR reader must expose QR-only draft creation and support K PLUS reference variants.");
 }
 if (ocrNoiseOnly.includes("6.LñusGnnuäns")) {
