@@ -7,6 +7,7 @@ Use this checklist every time the app UI, slip parsing, sync flow, or release ve
 Before changing code, read the project notes that match the work:
 
 - `VALIDATION_CHECKLIST.md` for the required validation workflow
+- `PROJECT_CONTEXT_REQUIRED.md` when starting from a new Codex chat/thread
 - `UI_AND_SLIP_FLOW_NOTES.md` for the reference-video UI and slip-sync rules
 - `README.md` for app setup, privacy, build, and release behavior
 - `RELEASE_NOTES.md` and `APP_UPDATE_NOTES_TH.md` when changing app version, update popup text, or release behavior
