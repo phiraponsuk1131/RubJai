@@ -72,6 +72,9 @@ object SlipParser {
             value.count(Char::isDigit) < 5 &&
             !maskedAccountPattern.containsMatchIn(value) &&
             recipientStopWords.none { value.contains(it, true) } &&
+            !value.contains("ธ.", true) &&
+            !value.contains("ธนาคาร", true) &&
+            !value.contains("บัญชี", true) &&
             !value.equals("K+", true) &&
             !value.equals("K PLUS", true) &&
             !value.contains("SCB EASY", true) &&

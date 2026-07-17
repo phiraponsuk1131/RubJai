@@ -36,6 +36,8 @@ import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.ImageSearch
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.BeachAccess
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CardGiftcard
@@ -216,6 +218,7 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
     var syncWorkId by remember { mutableStateOf<UUID?>(null) }
     var syncing by remember { mutableStateOf(false) }
     var syncScanned by remember { mutableIntStateOf(0) }
+    var syncStatusText by remember { mutableStateOf("") }
     var pendingSlips by remember { mutableStateOf(PendingSlipStore.load(context)) }
     var showPending by remember { mutableStateOf(false) }
     var pendingToReview by remember { mutableStateOf<PendingSlip?>(null) }
@@ -232,9 +235,9 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
         while (true) {
             val info = withContext(Dispatchers.IO) { runCatching { KPlusSyncManager.workInfo(context, workId) }.getOrNull() }
             when (info?.state) {
-                androidx.work.WorkInfo.State.RUNNING -> { syncing = true; syncScanned = info.progress.getInt("scanned", 0) }
-                androidx.work.WorkInfo.State.SUCCEEDED -> { syncing = false; pendingSlips = PendingSlipStore.load(context); val found = info.outputData.getInt("found", 0); message = if (found > 0) "สแกนเสร็จ พบ $found รายการ กรุณาตรวจและอนุมัติ" else "สแกนเสร็จ ไม่พบสลิปธนาคารหรือวอลเล็ตใหม่ของวันนี้"; syncWorkId = null; break }
-                androidx.work.WorkInfo.State.FAILED, androidx.work.WorkInfo.State.CANCELLED -> { syncing = false; message = "ซิงไม่สำเร็จ กรุณาตรวจสิทธิ์รูปภาพแล้วลองใหม่"; syncWorkId = null; break }
+                androidx.work.WorkInfo.State.RUNNING -> { syncing = true; syncScanned = info.progress.getInt("scanned", 0); syncStatusText = if (syncScanned > 0) "ตรวจแล้ว $syncScanned รูป" else "กำลังค้นหาสลิปใหม่" }
+                androidx.work.WorkInfo.State.SUCCEEDED -> { syncing = false; pendingSlips = PendingSlipStore.load(context); val found = info.outputData.getInt("found", 0); syncStatusText = if (found > 0) "พบ $found รายการ รอตรวจ" else "ซิงค์แล้ว ไม่พบสลิปใหม่"; syncWorkId = null; break }
+                androidx.work.WorkInfo.State.FAILED, androidx.work.WorkInfo.State.CANCELLED -> { syncing = false; syncStatusText = "ซิงค์ไม่สำเร็จ แตะเพื่อสแกนใหม่"; syncWorkId = null; break }
                 else -> syncing = true
             }
             delay(500)
@@ -284,26 +287,43 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
     MaterialTheme(colorScheme = colors) {
         Scaffold(
             containerColor = RubInk,
-            topBar = { if (mainTab == 0) RubJaiTopBar(authRepository.auth.currentUser?.displayName.orEmpty()) { mainTab = 1 } },
+            topBar = {},
             bottomBar = {
                 NavigationBar(containerColor = RubCream) {
                     NavigationBarItem(mainTab == 0, { mainTab = 0 }, { Icon(Icons.Default.Home, null) }, label = { Text("หน้าหลัก") })
                     NavigationBarItem(mainTab == 1, { mainTab = 1 }, { Icon(Icons.Default.AccountCircle, null) }, label = { Text("บัญชีของฉัน") })
                 }
             },
-            floatingActionButton = { if (mainTab == 0) FloatingActionButton(containerColor = Color(0xFFF27D6B), onClick = { draft = DraftTransaction(type = TransactionType.INCOME, source = "manual_income", category = "รายรับ") }) { Icon(Icons.Default.Add, "เพิ่มรายรับ", tint = Color.White) } }
+            floatingActionButton = {
+                if (mainTab == 0) ExtendedFloatingActionButton(
+                    containerColor = RubBlue,
+                    contentColor = Color.White,
+                    onClick = { draft = DraftTransaction(type = TransactionType.EXPENSE, source = "manual_expense", category = "ยังไม่จัดหมวด") },
+                    icon = { Icon(Icons.Default.Edit, "จดเพิ่ม") },
+                    text = { Text("จดเพิ่ม", fontWeight = FontWeight.Black) },
+                )
+            }
         ) { padding ->
             val visibleEntries = remember(entries, entryPeriod, entryKind) { entries.filterFor(entryPeriod, entryKind) }
-            LazyColumn(Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp), contentPadding = PaddingValues(top = 16.dp, bottom = 104.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(top = 18.dp, bottom = 116.dp), verticalArrangement = Arrangement.spacedBy(0.dp)) {
                 if (mainTab == 0) {
-                    item { SummaryCard(entries) }
-                    item { HomeActions(busy, syncing, pendingSlips.size, { imagePicker.launch(arrayOf("image/*")) }, { if (!syncConsent) showSyncConsent = true else if (ContextCompat.checkSelfPermission(context, scanPermission) == PackageManager.PERMISSION_GRANTED) startKPlusSync() else permissionLauncher.launch(scanPermission) }, { pendingSlips = PendingSlipStore.load(context); showPending = true }, { draft = DraftTransaction(type = TransactionType.INCOME, source = "manual_income", category = "รายรับ") }) }
-                    item { KPlusSyncStatus(syncing, syncScanned, syncConsent) { KPlusSyncManager.revoke(context); syncConsent = false } }
-                    item { Text("รายการของคุณ", style = MaterialTheme.typography.titleLarge, color = RubCream, fontWeight = FontWeight.Bold); EntryFilters(entryPeriod, entryKind, { entryPeriod = it }, { entryKind = it }) }
-                    item { SpendingOverview(entries.filterFor(entryPeriod, EntryKind.EXPENSE), entryPeriod) }
-                    if (visibleEntries.isEmpty()) item { Card(colors = CardDefaults.cardColors(containerColor = RubPanel)) { Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) { Text("ยังไม่มีรายการในช่วงนี้", color = RubCream, fontWeight = FontWeight.SemiBold); Text("เพิ่มรายรับหรือเลือกสลิปรายจ่าย", color = RubMuted, style = MaterialTheme.typography.bodySmall) } } }
-                    items(visibleEntries, key = { it.id }) { EntryRow(it) { selectedEntry = it } }
-                } else item { UserHub(authRepository.auth.currentUser?.displayName.orEmpty(), entries.size, { showProfile = true }, { showDebts = true }, { mainTab = 0 }, { showSyncConsent = true }) }
+                    item {
+                        HomeReferenceScreen(
+                            entries = visibleEntries,
+                            allEntries = entries,
+                            syncing = syncing,
+                            syncScanned = syncScanned,
+                            syncStatus = syncStatusText,
+                            pending = pendingSlips.size,
+                            busy = busy,
+                            onScan = { imagePicker.launch(arrayOf("image/*")) },
+                            onSync = { if (!syncConsent) showSyncConsent = true else if (ContextCompat.checkSelfPermission(context, scanPermission) == PackageManager.PERMISSION_GRANTED) startKPlusSync() else permissionLauncher.launch(scanPermission) },
+                            onReview = { pendingSlips = PendingSlipStore.load(context); showPending = true },
+                            onOpen = { selectedEntry = it },
+                            onAdd = { draft = DraftTransaction(type = TransactionType.EXPENSE, source = "manual_expense", category = "ยังไม่จัดหมวด") },
+                        )
+                    }
+                } else item { Box(Modifier.padding(horizontal = 16.dp)) { UserHub(authRepository.auth.currentUser?.displayName.orEmpty(), entries.size, { showProfile = true }, { showDebts = true }, { mainTab = 0 }, { showSyncConsent = true }) } }
             }
         }
         draft?.let { current -> TransactionDialog(current, onDismiss = { draft = null }, onSave = { saved -> busy = true; repository.add(saved, onDone = { error -> busy = false; if (error == null && saved.slipUri.isNotBlank()) LocalSlipLinkStore.put(context, TransactionRepository.documentIdFor(saved), saved.slipUri); message = error ?: "บันทึกแล้ว" }); draft = null }) }
@@ -330,7 +350,13 @@ fun RubJaiApp(repository: TransactionRepository, launchIntent: Intent) {
         message?.let { AlertDialog(onDismissRequest = { message = null }, confirmButton = { TextButton(onClick = { message = null }) { Text("ตกลง") } }, text = { Text(it) }) }
         if (showSyncConsent) AlertDialog(onDismissRequest = { showSyncConsent = false }, title = { Text("ยินยอมสแกนสลิปวันนี้?") }, text = { Text("RubJai จะอ่านรูปที่เพิ่มในวันนี้เพื่อหาสลิปธนาคารและวอลเล็ตด้วย OCR บนเครื่อง ผลจะอยู่ในคิวรออนุมัติและยังไม่บันทึกจนกว่าคุณจะยืนยัน") }, confirmButton = { Button(onClick = { KPlusSyncManager.setConsent(context, true); syncConsent = true; showSyncConsent = false; if (ContextCompat.checkSelfPermission(context, scanPermission) == PackageManager.PERMISSION_GRANTED) startKPlusSync() else permissionLauncher.launch(scanPermission) }) { Text("ยินยอมและสแกน") } }, dismissButton = { TextButton(onClick = { showSyncConsent = false }) { Text("ยังไม่ยินยอม") } })
         if (showPending) PendingSlipDialog(pendingSlips, onClose = { showPending = false }, onReview = { pendingToReview = it }, onReject = { pending -> PendingSlipStore.remove(context, pending.id); pendingSlips = PendingSlipStore.load(context); if (pendingSlips.isEmpty()) showPending = false })
-        selectedEntry?.let { item -> TransactionDetailDialog(item, onDismiss = { selectedEntry = null }, onUpdate = { draftValue -> repository.update(item, draftValue) { error -> message = error ?: "แก้ไขแล้ว"; if (error == null) selectedEntry = null } }, onDelete = { repository.delete(item) { error -> message = error ?: "ลบรายการแล้ว"; if (error == null) { LocalSlipLinkStore.remove(context, item.id); selectedEntry = null } } }) }
+        selectedEntry?.let { item ->
+            TransactionDialog(
+                initial = item.toDraft(LocalSlipLinkStore.get(context, item.id)),
+                onDismiss = { selectedEntry = null },
+                onSave = { draftValue -> repository.update(item, draftValue) { error -> message = error ?: "แก้ไขแล้ว"; if (error == null) selectedEntry = null } },
+            )
+        }
         availableUpdate?.let { update ->
             AlertDialog(
                 onDismissRequest = { if (updateProgress == null) availableUpdate = null },
@@ -467,6 +493,187 @@ private fun UserHubRow(icon: androidx.compose.ui.graphics.vector.ImageVector, ti
         Row(Modifier.fillMaxWidth().padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(icon, null, tint = RubMint, modifier = Modifier.size(30.dp)); Spacer(Modifier.width(16.dp)); Text(title, Modifier.weight(1f), color = RubCream, fontWeight = FontWeight.SemiBold); Text("›", color = RubCoral, style = MaterialTheme.typography.headlineSmall)
         }
+    }
+}
+
+@Composable
+private fun HomeReferenceScreen(
+    entries: List<MoneyTransaction>,
+    allEntries: List<MoneyTransaction>,
+    syncing: Boolean,
+    syncScanned: Int,
+    syncStatus: String,
+    pending: Int,
+    busy: Boolean,
+    onScan: () -> Unit,
+    onSync: () -> Unit,
+    onReview: () -> Unit,
+    onOpen: (MoneyTransaction) -> Unit,
+    onAdd: () -> Unit,
+) {
+    val expenseEntries = allEntries.filter { it.type == "EXPENSE" }
+    val monthExpense = expenseEntries.sumOf { it.amount }
+    val latest = allEntries.maxByOrNull { it.createdAt?.time ?: 0L }
+    val latestTime = latest?.createdAt?.let { SimpleDateFormat("HH:mm", Locale("th", "TH")).format(it) } ?: SimpleDateFormat("HH:mm", Locale("th", "TH")).format(Date())
+    val groups = entries.groupBy { homeDayMeta(it) }
+
+    Column(Modifier.fillMaxWidth().background(RubEntryNavy)) {
+        Row(Modifier.fillMaxWidth().padding(start = 138.dp, end = 24.dp, top = 18.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.CalendarMonth, null, tint = RubEntryMuted, modifier = Modifier.size(24.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("จดล่าสุดวันนี้ $latestTime", color = RubEntryMuted, style = MaterialTheme.typography.titleMedium)
+        }
+
+        Box(Modifier.fillMaxWidth().padding(start = 138.dp)) {
+            Column(Modifier.fillMaxWidth()) {
+                Surface(
+                    Modifier.fillMaxWidth().heightIn(min = 220.dp),
+                    color = RubEntryYellow,
+                    shape = RoundedCornerShape(topStart = 18.dp),
+                ) {
+                    Column(Modifier.padding(start = 40.dp, end = 28.dp, top = 26.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.KeyboardArrowLeft, null, tint = RubBlue, modifier = Modifier.size(42.dp))
+                            Icon(Icons.Default.CalendarMonth, null, tint = RubBlue, modifier = Modifier.size(32.dp))
+                            Spacer(Modifier.width(10.dp))
+                            Text(homeMonthLabel(), color = RubBlue, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black)
+                            Icon(Icons.Default.KeyboardArrowRight, null, tint = RubBlue, modifier = Modifier.size(42.dp))
+                        }
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text("ยอดใช้จ่าย", color = RubEntryNavy, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                                Text(moneyPlain(monthExpense), color = RubEntryNavy, style = MaterialTheme.typography.displayMedium, fontWeight = FontWeight.Black)
+                            }
+                            Button(
+                                onClick = {},
+                                colors = ButtonDefaults.buttonColors(containerColor = RubBlue, contentColor = Color.White),
+                                shape = RoundedCornerShape(28.dp),
+                                modifier = Modifier.height(58.dp),
+                            ) {
+                                Icon(Icons.Default.PieChart, null, modifier = Modifier.size(30.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text("ดูสรุป", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
+                            }
+                        }
+                    }
+                }
+                HomeSlipSyncBand(syncing, syncScanned, syncStatus, pending, busy, onScan, onSync, onReview)
+            }
+            androidx.compose.foundation.Image(
+                painterResource(R.drawable.rubjai_mascot),
+                contentDescription = null,
+                modifier = Modifier.align(Alignment.TopEnd).padding(end = 18.dp).offset(y = (-70).dp).size(128.dp),
+            )
+        }
+
+        if (groups.isEmpty()) {
+            HomeDaySection(HomeDayMeta("วันนี้", Calendar.getInstance().get(Calendar.DAY_OF_MONTH).toString()), emptyList(), onOpen)
+        } else {
+            groups.forEach { (day, dayEntries) -> HomeDaySection(day, dayEntries, onOpen) }
+        }
+
+        Spacer(Modifier.height(14.dp))
+        Button(
+            onClick = onAdd,
+            colors = ButtonDefaults.buttonColors(containerColor = RubBlue, contentColor = Color.White),
+            shape = RoundedCornerShape(32.dp),
+            modifier = Modifier.align(Alignment.End).padding(end = 40.dp, bottom = 24.dp).height(62.dp),
+        ) {
+            Icon(Icons.Default.Edit, null, modifier = Modifier.size(28.dp))
+            Spacer(Modifier.width(10.dp))
+            Text("จดเพิ่ม", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
+        }
+    }
+}
+
+@Composable
+private fun HomeSlipSyncBand(syncing: Boolean, scanned: Int, status: String, pending: Int, busy: Boolean, onScan: () -> Unit, onSync: () -> Unit, onReview: () -> Unit) {
+    Surface(Modifier.fillMaxWidth(), color = RubEntryTab) {
+        Row(Modifier.fillMaxWidth().padding(start = 38.dp, end = 24.dp, top = 18.dp, bottom = 18.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.ReceiptLong, null, tint = RubBlue, modifier = Modifier.size(52.dp))
+            Spacer(Modifier.width(18.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    when {
+                        pending > 0 -> "มีสลิปรอตรวจ $pending รายการ"
+                        syncing -> "กำลังซิงค์สลิป"
+                        else -> "ซิงค์สลิปอัตโนมัติ"
+                    },
+                    color = RubEntryNavy,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Black,
+                )
+                Text(
+                    when {
+                        syncing && scanned > 0 -> "ตรวจแล้ว $scanned รูป"
+                        status.isNotBlank() -> status
+                        else -> "เปิดแอพแล้วตรวจรูปใหม่ให้แบบเงียบ ๆ"
+                    },
+                    color = RubBlue,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+                if (syncing) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp), color = RubBlue, trackColor = RubBlue.copy(alpha = 0.16f))
+            }
+            Spacer(Modifier.width(8.dp))
+            TextButton(onClick = if (pending > 0) onReview else onSync, enabled = !busy) { Text(if (pending > 0) "ตรวจ" else "ซิงค์", color = RubBlue, fontWeight = FontWeight.Black) }
+            TextButton(onClick = onScan, enabled = !busy) { Text("เลือกสลิป", color = RubEntryNavy, fontWeight = FontWeight.Bold) }
+        }
+    }
+}
+
+@Composable
+private fun HomeDaySection(day: HomeDayMeta, entries: List<MoneyTransaction>, onOpen: (MoneyTransaction) -> Unit) {
+    val expense = entries.filter { it.type == "EXPENSE" }.sumOf { it.amount }
+    Row(Modifier.fillMaxWidth()) {
+        Box(Modifier.width(138.dp).fillMaxHeight().background(RubEntryNavy), contentAlignment = Alignment.TopCenter) {
+            Column(Modifier.padding(top = 34.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(day.label, color = if (day.label == "วันนี้") RubEntryYellow else Color.White, style = MaterialTheme.typography.titleLarge)
+                Text(day.number, color = Color.White, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black)
+            }
+        }
+        Column(Modifier.weight(1f)) {
+            Surface(Modifier.fillMaxWidth().height(104.dp), color = RubPanel) {
+                Row(Modifier.fillMaxSize().padding(horizontal = 28.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Spacer(Modifier.weight(1f))
+                    Column(horizontalAlignment = Alignment.End) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.ArrowUpward, null, tint = RubEntryMuted, modifier = Modifier.size(26.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("รายจ่าย", color = RubEntryMuted, style = MaterialTheme.typography.titleLarge)
+                        }
+                        Text(moneyPlain(expense), color = Color.White, style = MaterialTheme.typography.headlineMedium)
+                        if (entries.isNotEmpty()) Text("${entries.size} รายการ", color = RubEntryMuted, style = MaterialTheme.typography.bodyLarge)
+                    }
+                }
+            }
+            if (entries.isEmpty()) {
+                Box(Modifier.fillMaxWidth().height(160.dp).background(RubEntryCard), contentAlignment = Alignment.CenterEnd) {
+                    Text("ไม่มีรายการ", Modifier.padding(end = 28.dp), color = Color.White, style = MaterialTheme.typography.headlineSmall)
+                }
+            } else {
+                entries.forEach { HomeTimelineRow(it, onOpen) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomeTimelineRow(item: MoneyTransaction, onOpen: (MoneyTransaction) -> Unit) {
+    val visual = categoryVisual(item.category)
+    Row(
+        Modifier.fillMaxWidth().background(RubEntryCard).clickable { onOpen(item) }.padding(horizontal = 28.dp, vertical = 20.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Surface(Modifier.size(62.dp), color = Color.Transparent, shape = RoundedCornerShape(31.dp)) {
+            Icon(if (item.type == "INCOME") Icons.Default.ArrowDownward else visual.icon, null, tint = if (item.type == "INCOME") RubMint else visual.tint, modifier = Modifier.padding(10.dp))
+        }
+        Spacer(Modifier.width(18.dp))
+        Column(Modifier.weight(1f)) {
+            Text(item.category.ifBlank { "ยังไม่จัดหมวด" }, color = Color.White, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
+            Text(item.title.ifBlank { "ไม่ระบุรายการ" }, color = Color.White.copy(alpha = 0.82f), style = MaterialTheme.typography.titleMedium, maxLines = 1)
+        }
+        Text(moneyPlain(item.amount), color = Color.White, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
     }
 }
 
@@ -886,6 +1093,7 @@ private fun TransactionDialog(initial: DraftTransaction, onDismiss: () -> Unit, 
     var category by remember(initial) { mutableStateOf(initial.category.ifBlank { if (isIncomeStart) "รายรับ" else "ยังไม่จัดหมวด" }) }
     var remark by remember(initial) { mutableStateOf(initial.remark) }
     var showCategories by remember { mutableStateOf(false) }
+    var showSlip by remember { mutableStateOf(false) }
     val categories = remember(context, mode) { CategoryStore.all(context, mode == TransactionType.INCOME) }
     val accent = if (mode == TransactionType.INCOME) RubBlue else RubRed
     val selectedIcon = categoryVisual(category).icon
@@ -934,6 +1142,7 @@ private fun TransactionDialog(initial: DraftTransaction, onDismiss: () -> Unit, 
                     EntryField(icon = Icons.Default.ReceiptLong, text = remark, placeholder = "โน้ต / รายละเอียดเพิ่มเติม", onChange = { remark = it.take(160) })
 
                     if (initial.rawText.isNotBlank()) Text("ตรวจจากสลิปแล้ว: แก้ชื่อ ยอด และหมวดได้ก่อนบันทึก", color = RubEntryMuted, style = MaterialTheme.typography.bodyMedium)
+                    if (initial.slipUri.isNotBlank()) SlipSourceCard(initial.slipUri, title.ifBlank { category }, initial.occurredAt) { showSlip = true }
                     Spacer(Modifier.height(8.dp))
                     Button(
                         enabled = amount.toDoubleOrNull()?.let { it > 0.0 } == true,
@@ -956,6 +1165,7 @@ private fun TransactionDialog(initial: DraftTransaction, onDismiss: () -> Unit, 
             )
         }
     }
+    if (showSlip) FullScreenSlipDialog(initial.slipUri) { showSlip = false }
 }
 
 @Composable
@@ -1075,6 +1285,7 @@ private fun categoryVisual(category: String): CategoryVisual {
     return when {
         value.contains("อาหาร") || value.contains("food") -> CategoryVisual(Icons.Default.Restaurant, Color(0xFFFFB21A), Color(0xFFFFF4D7))
         value.contains("เดินทาง") || value.contains("รถ") || value.contains("travel") -> CategoryVisual(Icons.Default.DirectionsCar, Color(0xFF16BFD2), Color(0xFFE1FAFD))
+        value.contains("ของใช้") || value.contains("จำเป็น") -> CategoryVisual(Icons.Default.ReceiptLong, Color(0xFFE7D91A), Color(0xFFFFFBE1))
         value.contains("ช้อ") || value.contains("shop") -> CategoryVisual(Icons.Default.ShoppingBag, Color(0xFFFF20D7), Color(0xFFFFE5FA))
         value.contains("บันเทิง") || value.contains("movie") -> CategoryVisual(Icons.Default.Movie, Color(0xFFFF4A19), Color(0xFFFFE7DE))
         value.contains("บ้าน") || value.contains("ที่พัก") || value.contains("สาธาร") -> CategoryVisual(Icons.Default.House, Color(0xFF1A63FF), Color(0xFFE5EEFF))
@@ -1099,6 +1310,40 @@ private fun thaiTodayLabel(): String {
     return "$dayName $day $month $year"
 }
 
+private data class HomeDayMeta(val label: String, val number: String)
+
+private fun homeMonthLabel(date: Date = Date()): String {
+    val calendar = Calendar.getInstance(Locale("th", "TH")).apply { time = date }
+    val month = SimpleDateFormat("MMM", Locale("th", "TH")).format(calendar.time)
+    val year = ((calendar.get(Calendar.YEAR) + 543) % 100).toString().padStart(2, '0')
+    return "$month $year"
+}
+
+private fun homeDayMeta(item: MoneyTransaction): HomeDayMeta {
+    val calendar = Calendar.getInstance(Locale("th", "TH"))
+    val now = Calendar.getInstance(Locale("th", "TH"))
+    item.createdAt?.let { calendar.time = it }
+    val dayNumber = Regex("(?<![0-9])([0-3]?[0-9])\\s+[^0-9\\n]{1,12}\\s+(?:[0-9]{2}|[0-9]{4})").find(item.occurredAt)?.groupValues?.getOrNull(1)
+        ?: Regex("(?<![0-9])([0-3]?[0-9])[/.-][01]?[0-9][/.-](?:[0-9]{2}|[0-9]{4})").find(item.occurredAt)?.groupValues?.getOrNull(1)
+        ?: calendar.get(Calendar.DAY_OF_MONTH).toString()
+    val sameDay = now.get(Calendar.YEAR) == calendar.get(Calendar.YEAR) && now.get(Calendar.DAY_OF_YEAR) == calendar.get(Calendar.DAY_OF_YEAR)
+    val label = if (sameDay) "วันนี้" else SimpleDateFormat("EEE", Locale("th", "TH")).format(calendar.time)
+    return HomeDayMeta(label, dayNumber.trimStart('0').ifBlank { dayNumber })
+}
+
+private fun MoneyTransaction.toDraft(localSlipUri: String = "") = DraftTransaction(
+    amount = amount.toString(),
+    title = title,
+    type = runCatching { TransactionType.valueOf(type) }.getOrDefault(TransactionType.EXPENSE),
+    source = source,
+    rawText = rawText,
+    category = category.ifBlank { "ยังไม่จัดหมวด" },
+    remark = remark,
+    occurredAt = occurredAt,
+    slipFingerprint = slipFingerprint,
+    slipUri = localSlipUri,
+)
+
 private fun sharedDraft(intent: Intent): DraftTransaction? {
     if (intent.action != Intent.ACTION_SEND) return null
     val text = intent.getStringExtra(Intent.EXTRA_TEXT) ?: return null
@@ -1115,3 +1360,7 @@ private fun imageDate(context: Context, uri: Uri): Date? = runCatching {
 }.getOrNull()
 
 private fun money(value: Double) = NumberFormat.getCurrencyInstance(Locale("th", "TH")).format(value)
+private fun moneyPlain(value: Double) = NumberFormat.getNumberInstance(Locale("th", "TH")).apply {
+    minimumFractionDigits = if (value % 1.0 == 0.0) 0 else 2
+    maximumFractionDigits = 2
+}.format(value)

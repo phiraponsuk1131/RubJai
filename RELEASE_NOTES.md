@@ -1,8 +1,10 @@
-# RubJai v2.0.7
+# RubJai v3.0.0
 
-- Fixed broken Thai text rendering from the previous release.
-- Added QR-first slip parsing with OCR fallback for recipient, amount, date, time, and stable slip references.
-- Added real-time slip sync while the app is open, plus scan-on-entry when photo permission and consent are already available.
-- Tuned the category picker closer to the reference UI with circular colored icons and centered labels.
-- Added GitHub Actions gates for text integrity and sample slip parsing before APK build.
-- In-app update notes are provided separately in Thai via `APP_UPDATE_NOTES_TH.md`.
+- Rebuilt the main home screen into the dark navy/yellow timeline style from the reference flow.
+- Replaced the old active home cards with a month summary card, day rail, daily sections, category-icon rows, and a blue extended add button.
+- Kept slip sync silent: no completion popup. Sync status, scanned count, and pending slips now live inside the home timeline.
+- Updated transaction editing to use the same full-screen dark entry flow for existing records instead of the old cream detail screen.
+- Reworked default expense categories to match the reference picker style and labels more closely.
+- Improved slip recipient parsing so bank/account lines are not selected as the recipient name.
+- Added a GitHub Actions UI-flow gate to catch old home UI calls, popup slip-sync regressions, and version mismatch before APK build.
+- In-app update notes are provided in Thai via `APP_UPDATE_NOTES_TH.md`.

@@ -33,6 +33,8 @@ jobs:
         run: node scripts/check-text-integrity.js
       - name: Check slip parser samples
         run: node scripts/check-slip-samples.js
+      - name: Check redesigned UI flow
+        run: node scripts/check-ui-flow.js
       - name: Build APK (no tests)
         env:
           SIGNING_STORE_FILE: "${{ runner.temp }}/rubjai-release.jks"
