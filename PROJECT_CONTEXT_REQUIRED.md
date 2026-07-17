@@ -38,6 +38,7 @@ Do not assume the old app behavior is still desired. The active direction for Ru
 - transaction entry/edit uses the same dark full-screen editor
 - category picker uses a white bottom sheet with circular category icons
 - every change must be validated before push/release
+- never push to GitHub before running the relevant checks for the change; for app/UI/slip changes, run the full validation checklist first
 - after any UI edit, run the UI-flow check and perform a real device/emulator visual check when a device is available
 - when no device/emulator is available, run `node scripts/check-ui-layout.js` and inspect `build/ui-preview/home-360.svg` before build/release
 - saved transaction details must reopen the original slip image from the device through the local `slipUri` link; the image is not uploaded to Firebase

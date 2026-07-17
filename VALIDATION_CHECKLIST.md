@@ -15,6 +15,8 @@ Read these files before code changes:
 
 ## Required Checks Before Commit
 
+These checks must be run before every push to GitHub. Do not push first and rely on GitHub Actions to discover issues. For markdown-only edits, at minimum run the text and privacy checks; for app, UI, slip, sync, icon/logo, workflow, version, or release edits, run the full relevant checklist before pushing.
+
 1. Thai text integrity
    - Run `node scripts/check-text-integrity.js`
    - Must pass with no mojibake or replacement characters.
