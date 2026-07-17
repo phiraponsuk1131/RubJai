@@ -10,3 +10,4 @@
 - Expanded emulator smoke coverage to account, profile, and debt-planner pages.
 - Replaced the RubJai mark with a more minimal wallet logo.
 - Added a privacy gate so real slip images, screenshots, videos, local Downloads paths, and real slip references are not committed to GitHub.
+- Added a Windows local device smoke script for no-admin UI checks when a phone/ADB is available, and tuned the CI emulator to a lighter Android image.

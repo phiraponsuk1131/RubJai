@@ -56,10 +56,12 @@ jobs:
       - name: Android emulator smoke UI
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35
-          target: google_apis
+          api-level: 29
+          target: default
           arch: x86_64
-          profile: pixel_6
+          profile: pixel_2
+          emulator-boot-timeout: 1200
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none -memory 1536
           script: bash scripts/emulator-smoke.sh
       - name: Upload emulator smoke screenshots
         if: always()

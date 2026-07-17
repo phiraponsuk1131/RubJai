@@ -54,6 +54,7 @@ Read these files before code changes:
 
 7. Visual/device review
    - If a device or emulator is connected, install the APK, open the app, and capture screenshots.
+   - On Windows with a connected phone and ADB available, run `powershell -ExecutionPolicy Bypass -File scripts\local-device-smoke.ps1`.
    - Compare the home screen, add/edit screen, category picker, pending slip review, full-screen slip image, and update popup against the latest user screenshots/video.
    - Do not release a UI change that has only been checked by static code search when a device/emulator is available.
    - GitHub Actions runs `scripts/emulator-smoke.sh` on an Android emulator and uploads screenshots for the main no-OTP trial flow.
